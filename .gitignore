@@ -1,0 +1,17 @@
+# Python cache & virtual env
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Environment secrets
+.env
+*.key
+
+# Embeddings and local data
+embedder/emb_out/
+*.npy
+*.tsv
+
+# macOS junk
+.DS_Store
