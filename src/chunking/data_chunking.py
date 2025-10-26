@@ -6,7 +6,7 @@ from nltk.tokenize import sent_tokenize
 # Download NLTK sentence tokenizer if not already present
 nltk.download('punkt', quiet=True)
 
-def sentence_chunk_text(text, max_chars=300):
+def sentence_chunk_text(text, max_chars=500):
     """
     Split text into chunks <= max_chars.
     Tries to keep sentences intact, but splits long sentences on punctuation or
