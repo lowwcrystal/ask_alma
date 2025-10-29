@@ -1,5 +1,5 @@
 // src/App.js
-import AskAlma from "./AskAlma/AskAlma";
+import AskAlma from "./components/AskAlma";
 
 import "./index.css"; // make sure Tailwind styles are applied
 
