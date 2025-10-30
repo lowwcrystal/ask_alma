@@ -1,0 +1,42 @@
+# Environment variables (contains API keys - NEVER commit!)
+.env
+**/.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Embeddings output (too large for git)
+src/embedder/emb_out/*.npy
+src/embedder/emb_out/*.meta.tsv
+src/embedder/embeddings/emb_out/*.npy
+src/embedder/embeddings/emb_out/*.meta.tsv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
