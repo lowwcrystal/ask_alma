@@ -1,10 +1,10 @@
 import nltk
 import json
 from tqdm import tqdm
-from nltk.tokenize import sent_tokenize
 
 # Download NLTK sentence tokenizer if not already present
 nltk.download('punkt', quiet=True)
+from nltk.tokenize import sent_tokenize
 
 def sentence_chunk_text(text, max_chars=300):
     """
@@ -13,7 +13,7 @@ def sentence_chunk_text(text, max_chars=300):
     forcibly at max_chars if needed.
     """
     import re
-    # use nltk to split setences semantically
+    # use nltk to split sentences semantically
     sentences = sent_tokenize(text)
     chunks, current = [], ""
 
@@ -65,6 +65,7 @@ def process_jsonl_files(filenames, max_chars=300):
                 })
 
     return data
+
 
 # Example files
 filenames = [
