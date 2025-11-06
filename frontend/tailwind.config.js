@@ -10,6 +10,7 @@ module.exports = {
         almaBlue: "#0055B7", // deep blue
         almaLightBlue: "#9BD1F9",
         almaGray: "#F9FAFB",
+        columbia: "#9BDDFF", // Columbia blue
       },
     },
   },

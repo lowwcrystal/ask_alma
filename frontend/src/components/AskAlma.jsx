@@ -1,6 +1,8 @@
-// src/components/AskAlma/AskAlma.jsx
-import React, { useState } from "react";
-import { Send } from "lucide-react";
+// src/components/AskAlma.jsx
+import React, { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Send, LogOut } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 
 // Chat Message componant
@@ -36,13 +38,53 @@ export default function AskAlma() {
   const [suggested] = useState(initialSuggested);
   const [input, setInput] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const navigate = useNavigate();
+  const { logout, user } = useAuth();
+  const [searchParams] = useSearchParams();
 
+  // Handle search query from landing page
+  useEffect(() => {
+    const query = searchParams.get('q');
+    if (query) {
+      handleSendQuery(query);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    setMessages([...messages, { from: "user", text: input }]);
+  const handleSendQuery = async (queryText) => {
+    if (!queryText.trim()) return;
+    const nextMessages = [...messages, { from: "user", text: queryText }];
+    setMessages(nextMessages);
+    setShowSuggestions(false);
+    setIsSending(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: queryText, history: nextMessages }),
+      });
+      const data = await res.json();
+      const reply = data?.reply || "Sorry, I couldn't get a response.";
+      setMessages((prev) => [...prev, { from: "alma", text: reply }]);
+    } catch (e) {
+      setMessages((prev) => [...prev, { from: "alma", text: "Network error. Please try again." }]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text || isSending) return;
     setInput("");
-    setShowSuggestions(false); // hide suggestions after first message
+    await handleSendQuery(text);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
   };
 
   return (
@@ -67,19 +109,29 @@ export default function AskAlma() {
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="border-b p-8 flex items-center gap-4 bg-white shadow-sm">
-          <img
-            src="/AskAlma_Logo.jpg"
-            alt="AskAlma Logo"
-            className="w-16 h-16 object-contain scale-150"
-            style={{ flexShrink: 0 }}
-          />
-          <div>
-            <h1 className="text-3xl font-bold text-almaBlue tracking-tight">AskAlma</h1>
-            <p className="text-base text-gray-600">
-              Your AI Academic Advisor for Columbia University
-            </p>
+        <header className="border-b p-8 flex items-center justify-between bg-white shadow-sm">
+          <div className="flex items-center gap-4">
+            <img
+              src="/AskAlma_Logo.jpg"
+              alt="AskAlma Logo"
+              className="w-16 h-16 object-contain scale-150"
+              style={{ flexShrink: 0 }}
+            />
+            <div>
+              <h1 className="text-3xl font-bold text-almaBlue tracking-tight">AskAlma</h1>
+              <p className="text-base text-gray-600">
+                Your AI Academic Advisor for Columbia University
+              </p>
+            </div>
           </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-[#003865] hover:bg-gray-50 rounded-lg transition"
+            title="Log out"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="hidden md:inline">Log out</span>
+          </button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -87,26 +139,27 @@ export default function AskAlma() {
             {messages.map((msg, i) => (
               <ChatMessage key={i} from={msg.from} text={msg.text} />
             ))}
-            {showSuggestions && (
-              <div className="mt-6">
-                <p className="text-gray-500 mb-2 font-medium">Suggested questions:</p>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {suggested.map((q, i) => (
-                    <SuggestedQuestion
-                      key={i}
-                      text={q}
-                      onClick={() => {
-                        setMessages([...messages, { from: "user", text: q }]);
-                        setShowSuggestions(false);
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
+        {/* Suggested questions - positioned above input bar */}
+        {showSuggestions && (
+          <div className="px-6 py-3 ">
+            <p className="text-gray-500 mb-2 font-medium">Suggested questions:</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {suggested.map((q, i) => (
+                <SuggestedQuestion
+                  key={i}
+                  text={q}
+                  onClick={() => {
+                    setMessages([...messages, { from: "user", text: q }]);
+                    setShowSuggestions(false);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Input bar */}
         <div className="border-t p-4 flex items-center gap-2">
@@ -120,7 +173,10 @@ export default function AskAlma() {
           />
           <button
             onClick={handleSend}
-            className="bg-almaBlue text-white rounded-xl p-2 hover:brightness-90 transition"
+            disabled={isSending}
+            className={`bg-almaBlue text-white rounded-xl p-2 transition ${
+              isSending ? "opacity-60 cursor-not-allowed" : "hover:brightness-90"
+            }`}
           >
             <Send className="w-5 h-5" />
           </button>
