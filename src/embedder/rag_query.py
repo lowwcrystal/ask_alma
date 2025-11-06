@@ -59,11 +59,7 @@ def get_pg_conn():
             sep = "&" if "?" in url else "?"
             url = f"{url}{sep}sslmode=require"
         return psycopg2.connect(url, cursor_factory=RealDictCursor)
-        raise SystemExit("Missing DB settings. Set DATABASE_URL in .env")
-    return psycopg2.connect(
-        host=host, port=port, dbname=db, user=user, password=pwd, sslmode="require",
-        cursor_factory=RealDictCursor
-    )
+    raise SystemExit("Missing DB settings. Set DATABASE_URL in .env")
 
 # -------------------------------
 # Conversation Management
