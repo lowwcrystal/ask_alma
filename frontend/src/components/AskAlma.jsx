@@ -1,13 +1,53 @@
 // src/components/AskAlma/AskAlma.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Send, Loader2 } from "lucide-react";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
+// Typing animation component
+function TypingText({ text, speed = 20, onComplete }) {
+  const [displayedText, setDisplayedText] = useState("");
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const timeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (currentIndex < text.length) {
+      timeoutRef.current = setTimeout(() => {
+        setDisplayedText(prev => prev + text[currentIndex]);
+        setCurrentIndex(prev => prev + 1);
+      }, speed);
+    } else if (onComplete && currentIndex === text.length && text.length > 0) {
+      onComplete();
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [currentIndex, text, speed, onComplete]);
+
+  // Reset when text changes
+  useEffect(() => {
+    setDisplayedText("");
+    setCurrentIndex(0);
+  }, [text]);
+
+  return (
+    <span className="whitespace-pre-wrap">
+      {displayedText}
+      {currentIndex < text.length && (
+        <span className="inline-block w-1 h-4 bg-gray-400 animate-pulse ml-0.5" />
+      )}
+    </span>
+  );
+}
+
 // Chat Message component
-function ChatMessage({ from, text, sources }) {
+function ChatMessage({ from, text, sources, isTyping = false }) {
   const [showSources, setShowSources] = useState(false);
+  const [typingComplete, setTypingComplete] = useState(!isTyping);
   
   return (
     <div
@@ -17,10 +57,20 @@ function ChatMessage({ from, text, sources }) {
           : "bg-almaLightBlue text-gray-900 ml-auto"
       }`}
     >
-      <div className="whitespace-pre-wrap">{text}</div>
+      <div>
+        {from === "alma" && isTyping ? (
+          <TypingText 
+            text={text} 
+            speed={15} 
+            onComplete={() => setTypingComplete(true)}
+          />
+        ) : (
+          <span className="whitespace-pre-wrap">{text}</span>
+        )}
+      </div>
       
-      {/* Show sources for AI responses */}
-      {from === "alma" && sources && sources.length > 0 && (
+      {/* Show sources for AI responses - only after typing is complete */}
+      {from === "alma" && sources && sources.length > 0 && typingComplete && (
         <div className="mt-3 pt-3 border-t border-gray-200">
           <button
             onClick={() => setShowSources(!showSources)}
@@ -68,6 +118,13 @@ export default function AskAlma() {
   const [conversationId, setConversationId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [latestMessageIndex, setLatestMessageIndex] = useState(-1);
+  const messagesEndRef = useRef(null);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const sendMessage = async (question) => {
     try {
@@ -101,13 +158,17 @@ export default function AskAlma() {
         setConversationId(data.conversation_id);
       }
       
-      // Add AI response to UI
+      // Add AI response to UI with typing animation
       const aiMessage = {
         from: "alma",
         text: data.answer,
         sources: data.sources
       };
-      setMessages(prev => [...prev, aiMessage]);
+      setMessages(prev => {
+        const newMessages = [...prev, aiMessage];
+        setLatestMessageIndex(newMessages.length - 1);
+        return newMessages;
+      });
       
     } catch (err) {
       console.error('Error sending message:', err);
@@ -118,7 +179,11 @@ export default function AskAlma() {
         from: "alma",
         text: "Sorry, I encountered an error. Please make sure the backend server is running and try again."
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => {
+        const newMessages = [...prev, errorMessage];
+        setLatestMessageIndex(newMessages.length - 1);
+        return newMessages;
+      });
     } finally {
       setIsLoading(false);
     }
@@ -142,6 +207,7 @@ export default function AskAlma() {
     setConversationId(null);
     setShowSuggestions(true);
     setError(null);
+    setLatestMessageIndex(-1);
   };
 
   return (
@@ -200,6 +266,7 @@ export default function AskAlma() {
                 from={msg.from} 
                 text={msg.text}
                 sources={msg.sources}
+                isTyping={msg.from === "alma" && i === latestMessageIndex}
               />
             ))}
             
@@ -233,6 +300,9 @@ export default function AskAlma() {
                 </div>
               </div>
             )}
+            
+            {/* Invisible div for auto-scrolling */}
+            <div ref={messagesEndRef} />
           </div>
         </div>
 
