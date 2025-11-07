@@ -5,6 +5,52 @@ import { initialMessages, suggestedQuestions as initialSuggested } from "./askAl
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
+// Utility function to parse markdown bold syntax (**text**)
+function parseMarkdownBold(text) {
+  const parts = [];
+  let currentIndex = 0;
+  const boldRegex = /\*\*(.*?)\*\*/g;
+  let match;
+  
+  while ((match = boldRegex.exec(text)) !== null) {
+    // Add text before the bold part
+    if (match.index > currentIndex) {
+      parts.push({ type: 'text', content: text.slice(currentIndex, match.index) });
+    }
+    // Add the bold part
+    parts.push({ type: 'bold', content: match[1] });
+    currentIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text after last bold part
+  if (currentIndex < text.length) {
+    parts.push({ type: 'text', content: text.slice(currentIndex) });
+  }
+  
+  return parts;
+}
+
+// Component to render parsed markdown text
+function MarkdownText({ text }) {
+  const parts = parseMarkdownBold(text);
+  
+  if (parts.length === 0) {
+    return <>{text}</>;
+  }
+  
+  return (
+    <>
+      {parts.map((part, idx) => (
+        part.type === 'bold' ? (
+          <strong key={idx}>{part.content}</strong>
+        ) : (
+          <React.Fragment key={idx}>{part.content}</React.Fragment>
+        )
+      ))}
+    </>
+  );
+}
+
 // Typing animation component
 function TypingText({ text, speed = 20, onComplete }) {
   const [displayedText, setDisplayedText] = useState("");
@@ -35,12 +81,12 @@ function TypingText({ text, speed = 20, onComplete }) {
   }, [text]);
 
   return (
-    <span className="whitespace-pre-wrap">
-      {displayedText}
+    <>
+      <MarkdownText text={displayedText} />
       {currentIndex < text.length && (
         <span className="inline-block w-1 h-4 bg-gray-400 animate-pulse ml-0.5" />
       )}
-    </span>
+    </>
   );
 }
 
@@ -57,7 +103,7 @@ function ChatMessage({ from, text, sources, isTyping = false }) {
           : "bg-almaLightBlue text-gray-900 ml-auto"
       }`}
     >
-      <div>
+      <div className="whitespace-pre-wrap">
         {from === "alma" && isTyping ? (
           <TypingText 
             text={text} 
@@ -65,7 +111,7 @@ function ChatMessage({ from, text, sources, isTyping = false }) {
             onComplete={() => setTypingComplete(true)}
           />
         ) : (
-          <span className="whitespace-pre-wrap">{text}</span>
+          <MarkdownText text={text} />
         )}
       </div>
       
