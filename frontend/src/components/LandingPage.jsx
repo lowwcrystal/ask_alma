@@ -58,14 +58,13 @@ export default function LandingPage() {
     setIsSending(true);
 
     try {
-      // Use the backend API URL - adjust port if needed (default FastAPI is 8000)
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      // Use the backend API URL - backend runs on port 5001
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
       const res = await fetch(`${apiUrl}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          message: userMessage, 
-          history: newMessages,
+          question: userMessage, 
           conversation_id: conversationId 
         }),
       });
@@ -75,14 +74,14 @@ export default function LandingPage() {
       }
       
       const data = await res.json();
-      const reply = data?.reply || "Sorry, I couldn't get a response.";
+      const reply = data?.answer || "Sorry, I couldn't get a response.";
       
       // Update conversation_id if returned
       if (data?.conversation_id) {
         setConversationId(data.conversation_id);
       }
       
-      setMessages((prev) => [...prev, { from: 'alma', text: reply, timestamp: new Date().toISOString() }]);
+      setMessages((prev) => [...prev, { from: 'alma', text: reply, sources: data?.sources, timestamp: new Date().toISOString() }]);
     } catch (e) {
       console.error('Error calling API:', e);
       setMessages((prev) => [...prev, { from: 'alma', text: "Network error. Please try again.", timestamp: new Date().toISOString() }]);

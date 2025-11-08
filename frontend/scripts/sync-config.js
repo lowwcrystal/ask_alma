@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// Read .env file from root
-const envPath = path.join(__dirname, '../../.env');
+// Read .env file from src/embedder
+const envPath = path.join(__dirname, '../../src/embedder/.env');
 const configPath = path.join(__dirname, '../public/config.js');
 
 try {

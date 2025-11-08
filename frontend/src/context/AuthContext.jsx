@@ -43,26 +43,46 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) throw error;
-    return data;
+      if (error) {
+        console.error('Supabase login error:', error);
+        throw error;
+      }
+      
+      console.log('Login successful:', { hasUser: !!data?.user, hasSession: !!data?.session });
+      return data;
+    } catch (error) {
+      console.error('Login exception:', error);
+      throw error;
+    }
   };
 
   const signUp = async (email, password, metadata = {}) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: metadata,
-      },
-    });
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: metadata,
+        },
+      });
 
-    if (error) throw error;
-    return data;
+      if (error) {
+        console.error('Supabase signUp error:', error);
+        throw error;
+      }
+      
+      console.log('SignUp successful:', { hasUser: !!data?.user, hasSession: !!data?.session });
+      return data;
+    } catch (error) {
+      console.error('SignUp exception:', error);
+      throw error;
+    }
   };
 
   const logout = async () => {

@@ -229,7 +229,7 @@ export default function AskAlma() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          message: queryText, 
+          question: queryText, 
           conversation_id: conversationId 
         }),
       });
@@ -334,14 +334,12 @@ export default function AskAlma() {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="border-b p-8 flex items-center justify-between bg-white shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="rounded-full" style={{ flexShrink: 0, width: '96px', height: '96px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
-              <img
-                src="/Icon.png"
-                alt="AskAlma Logo"
-                className="logo-no-bg"
-                style={{ width: '96px', height: 'auto', objectFit: 'contain' }}
-              />
-            </div>
+            <img
+              src="/AskAlma_Logo.jpg?v=1"
+              alt="AskAlma Logo"
+              className="logo-no-bg"
+              style={{ width: '96px', height: '96px', objectFit: 'contain' }}
+            />
             <div>
               <h1 className="text-3xl font-bold text-almaBlue tracking-tight">AskAlma</h1>
               <p className="text-base text-gray-600">

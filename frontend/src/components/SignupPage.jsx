@@ -27,20 +27,27 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      const { data, error: signUpError } = await signUp(email, password, {
+      const result = await signUp(email, password, {
         name: email.split('@')[0],
       });
 
-      if (signUpError) throw signUpError;
-
-      // If email confirmation is required, show a message
-      if (data.user && !data.session) {
+      // Check if signup was successful
+      if (result && result.user) {
+        // If email confirmation is required, show a message
+        if (!result.session) {
+          setError('Please check your email to confirm your account before signing in.');
+          setTimeout(() => navigate('/login'), 3000);
+        } else {
+          // User is logged in, go to chat
+          navigate('/chat');
+        }
+      } else {
+        // Success but no user data - likely email confirmation required
         setError('Please check your email to confirm your account before signing in.');
         setTimeout(() => navigate('/login'), 3000);
-      } else {
-        navigate('/chat');
       }
     } catch (err) {
+      console.error('Signup error:', err);
       setError(err.message || 'Sign up failed. Please try again.');
     } finally {
       setLoading(false);

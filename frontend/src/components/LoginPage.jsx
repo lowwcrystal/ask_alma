@@ -26,10 +26,22 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password);
+      const result = await login(email, password);
+      console.log('Login result:', result);
       navigate('/chat');
     } catch (err) {
-      setError(err.message || 'Login failed. Please check your credentials and try again.');
+      console.error('Login error details:', err);
+      
+      // Provide more specific error messages
+      let errorMessage = err.message || 'Login failed. Please check your credentials and try again.';
+      
+      if (err.message && err.message.toLowerCase().includes('email not confirmed')) {
+        errorMessage = 'Please confirm your email address. Check your inbox for the confirmation link. If you confirmed already, try waiting a minute and logging in again.';
+      } else if (err.message && err.message.toLowerCase().includes('invalid')) {
+        errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
