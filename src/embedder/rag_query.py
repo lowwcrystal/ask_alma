@@ -125,7 +125,6 @@ def build_prompt(question: str, contexts: list[str], chat_history: List[Dict[str
     {history_text}
     CONTEXT:
     {context_text}
-
     QUESTION:
     {question}
 

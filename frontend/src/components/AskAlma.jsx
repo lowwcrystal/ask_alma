@@ -49,7 +49,7 @@ function ChatMessage({ from, text, timestamp }) {
   );
 }
 
-// Suggested question componant
+// Suggested question component
 function SuggestedQuestion({ text, onClick }) {
   return (
     <button
@@ -121,9 +121,20 @@ export default function AskAlma() {
     <div className="flex w-screen h-screen bg-almaGray">
       {/* Sidebar */}
       <div className="w-64 bg-gray-100 border-r p-4 flex flex-col">
-        <button className="bg-almaLightBlue text-gray-900 font-medium rounded-lg py-2 mb-4 hover:brightness-95 transition">
+        <button 
+          onClick={startNewChat}
+          className="bg-almaLightBlue text-gray-900 font-medium rounded-lg py-2 mb-4 hover:brightness-95 transition"
+        >
           + New Chat
         </button>
+        
+        {conversationId && (
+          <div className="text-xs text-gray-500 mb-4 p-2 bg-white rounded border">
+            <div className="font-semibold mb-1">Current Chat</div>
+            <div className="truncate">{conversationId}</div>
+          </div>
+        )}
+        
         <div className="mt-auto text-sm text-gray-600">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-gray-400" />
