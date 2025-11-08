@@ -1,12 +1,100 @@
 // src/components/AskAlma.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUp, LogOut } from "lucide-react";
+import { ArrowUp, LogOut, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 
-// Chat Message componant
-function ChatMessage({ from, text, timestamp }) {
+// Utility function to parse markdown bold syntax (**text**)
+function parseMarkdownBold(text) {
+  const parts = [];
+  let currentIndex = 0;
+  const boldRegex = /\*\*(.*?)\*\*/g;
+  let match;
+  
+  while ((match = boldRegex.exec(text)) !== null) {
+    // Add text before the bold part
+    if (match.index > currentIndex) {
+      parts.push({ type: 'text', content: text.slice(currentIndex, match.index) });
+    }
+    // Add the bold part
+    parts.push({ type: 'bold', content: match[1] });
+    currentIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text after last bold part
+  if (currentIndex < text.length) {
+    parts.push({ type: 'text', content: text.slice(currentIndex) });
+  }
+  
+  return parts;
+}
+
+// Component to render parsed markdown text
+function MarkdownText({ text }) {
+  const parts = parseMarkdownBold(text);
+  
+  if (parts.length === 0) {
+    return <>{text}</>;
+  }
+  
+  return (
+    <>
+      {parts.map((part, idx) => (
+        part.type === 'bold' ? (
+          <strong key={idx}>{part.content}</strong>
+        ) : (
+          <React.Fragment key={idx}>{part.content}</React.Fragment>
+        )
+      ))}
+    </>
+  );
+}
+
+// Typing animation component
+function TypingText({ text, speed = 20, onComplete }) {
+  const [displayedText, setDisplayedText] = useState("");
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const timeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (currentIndex < text.length) {
+      timeoutRef.current = setTimeout(() => {
+        setDisplayedText(prev => prev + text[currentIndex]);
+        setCurrentIndex(prev => prev + 1);
+      }, speed);
+    } else if (onComplete && currentIndex === text.length && text.length > 0) {
+      onComplete();
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [currentIndex, text, speed, onComplete]);
+
+  // Reset when text changes
+  useEffect(() => {
+    setDisplayedText("");
+    setCurrentIndex(0);
+  }, [text]);
+
+  return (
+    <>
+      <MarkdownText text={displayedText} />
+      {currentIndex < text.length && (
+        <span className="inline-block w-1 h-4 bg-gray-400 animate-pulse ml-0.5" />
+      )}
+    </>
+  );
+}
+
+// Chat Message component
+function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
+  const [showSources, setShowSources] = useState(false);
+  const [typingComplete, setTypingComplete] = useState(!isTyping);
+  
   const formatTime = (ts) => {
     if (!ts) return '';
     const date = new Date(ts);
@@ -37,7 +125,42 @@ function ChatMessage({ from, text, timestamp }) {
               : "bg-[#B9D9EB] text-gray-900"
           }`}
         >
-          {text}
+          <div className="whitespace-pre-wrap">
+            {from === "alma" && isTyping ? (
+              <TypingText 
+                text={text} 
+                speed={15} 
+                onComplete={() => setTypingComplete(true)}
+              />
+            ) : (
+              <MarkdownText text={text} />
+            )}
+          </div>
+          
+          {/* Show sources for AI responses - only after typing is complete */}
+          {from === "alma" && sources && sources.length > 0 && typingComplete && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <button
+                onClick={() => setShowSources(!showSources)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                {showSources ? "Hide" : "Show"} sources ({sources.length})
+              </button>
+              
+              {showSources && (
+                <div className="mt-2 space-y-2">
+                  {sources.map((source, idx) => (
+                    <div key={idx} className="text-xs bg-gray-50 p-2 rounded border">
+                      <div className="font-semibold text-gray-700">
+                        Source {idx + 1} (similarity: {(source.similarity * 100).toFixed(1)}%)
+                      </div>
+                      <div className="text-gray-600 mt-1">{source.content}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {timestamp && (
           <p className={`text-xs text-gray-500 mt-1 ${from === "alma" ? "text-left" : "text-right"}`}>
@@ -67,10 +190,19 @@ export default function AskAlma() {
   const [suggested] = useState(initialSuggested);
   const [input, setInput] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [isSending, setIsSending] = useState(false);
+  const [conversationId, setConversationId] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [latestMessageIndex, setLatestMessageIndex] = useState(-1);
+  const messagesEndRef = useRef(null);
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [searchParams] = useSearchParams();
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Handle search query from landing page
   useEffect(() => {
@@ -82,34 +214,84 @@ export default function AskAlma() {
   }, []);
 
   const handleSendQuery = async (queryText) => {
-    if (!queryText.trim()) return;
+    if (!queryText.trim() || isLoading) return;
+    
     const now = new Date().toISOString();
-    const nextMessages = [...messages, { from: "user", text: queryText, timestamp: now }];
-    setMessages(nextMessages);
+    const userMessage = { from: "user", text: queryText, timestamp: now };
+    
+    setMessages(prev => [...prev, userMessage]);
     setShowSuggestions(false);
-    setIsSending(true);
+    setIsLoading(true);
+    setError(null);
 
     try {
-      const res = await fetch("/api/chat", {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: queryText, history: nextMessages }),
+        body: JSON.stringify({ 
+          message: queryText, 
+          conversation_id: conversationId 
+        }),
       });
-      const data = await res.json();
-      const reply = data?.reply || "Sorry, I couldn't get a response.";
-      setMessages((prev) => [...prev, { from: "alma", text: reply, timestamp: new Date().toISOString() }]);
-    } catch (e) {
-      setMessages((prev) => [...prev, { from: "alma", text: "Network error. Please try again.", timestamp: new Date().toISOString() }]);
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Update conversation ID if this is a new conversation
+      if (!conversationId && data.conversation_id) {
+        setConversationId(data.conversation_id);
+      }
+      
+      // Add AI response to UI with typing animation
+      const aiMessage = {
+        from: "alma",
+        text: data.answer || data.reply || "Sorry, I couldn't get a response.",
+        sources: data.sources,
+        timestamp: new Date().toISOString()
+      };
+      
+      setMessages(prev => {
+        const newMessages = [...prev, aiMessage];
+        setLatestMessageIndex(newMessages.length - 1);
+        return newMessages;
+      });
+      
+    } catch (err) {
+      console.error('Error sending message:', err);
+      setError(err.message);
+      
+      // Add error message to chat
+      const errorMessage = {
+        from: "alma",
+        text: "Sorry, I encountered an error. Please make sure the backend server is running and try again.",
+        timestamp: new Date().toISOString()
+      };
+      setMessages(prev => {
+        const newMessages = [...prev, errorMessage];
+        setLatestMessageIndex(newMessages.length - 1);
+        return newMessages;
+      });
     } finally {
-      setIsSending(false);
+      setIsLoading(false);
     }
   };
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || isSending) return;
+    if (!text || isLoading) return;
     setInput("");
     await handleSendQuery(text);
+  };
+
+  const startNewChat = () => {
+    setMessages([]);
+    setConversationId(null);
+    setShowSuggestions(true);
+    setError(null);
+    setLatestMessageIndex(-1);
   };
 
   const handleLogout = () => {
@@ -139,7 +321,7 @@ export default function AskAlma() {
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-gray-400" />
             <div>
-              <p className="font-semibold">Columbia Student</p>
+              <p className="font-semibold">{user?.email || 'Columbia Student'}</p>
               <p className="text-xs text-gray-500 underline cursor-pointer">
                 View Profile
               </p>
@@ -180,23 +362,46 @@ export default function AskAlma() {
         <div className="flex-1 overflow-y-auto px-6 py-4">
           <div className="flex flex-col space-y-4">
             {messages.map((msg, i) => (
-              <ChatMessage key={i} from={msg.from} text={msg.text} timestamp={msg.timestamp} />
+              <ChatMessage 
+                key={i} 
+                from={msg.from} 
+                text={msg.text}
+                sources={msg.sources}
+                timestamp={msg.timestamp}
+                isTyping={msg.from === "alma" && i === latestMessageIndex}
+              />
             ))}
+            
+            {/* Loading indicator */}
+            {isLoading && (
+              <div className="flex items-center gap-2 text-gray-500 self-start">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Thinking...</span>
+              </div>
+            )}
+            
+            {/* Error message */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                <strong>Error:</strong> {error}
+              </div>
+            )}
+            
+            {/* Invisible div for auto-scrolling */}
+            <div ref={messagesEndRef} />
           </div>
         </div>
 
         {/* Suggested questions - positioned above input bar */}
-        {showSuggestions && (
-          <div className="px-6 py-3 ">
+        {showSuggestions && messages.length === 0 && (
+          <div className="px-6 py-3">
             <p className="text-gray-500 mb-2 font-medium">Suggested questions:</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {suggested.map((q, i) => (
                 <SuggestedQuestion
                   key={i}
                   text={q}
-                  onClick={() => {
-                    handleSendQuery(q);
-                  }}
+                  onClick={() => handleSendQuery(q)}
                 />
               ))}
             </div>
@@ -226,9 +431,9 @@ export default function AskAlma() {
               />
               <button
                 onClick={handleSend}
-                disabled={isSending || !input.trim()}
+                disabled={isLoading || !input.trim()}
                 className={`absolute right-2 bottom-2 p-2 rounded-lg transition ${
-                  isSending || !input.trim()
+                  isLoading || !input.trim()
                     ? "bg-gray-300 cursor-not-allowed"
                     : "bg-[#003865] text-white hover:bg-[#002d4f]"
                 }`}
