@@ -5,6 +5,32 @@ import { ArrowUp, LogOut, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 
+// Animated thinking indicator component
+function ThinkingAnimation() {
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const frames = [
+    '/thinking_frame_1.png',
+    '/thinking_frame_2.png',
+    '/thinking_frame_3.png'
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentFrame((prev) => (prev + 1) % frames.length);
+    }, 500); // Change frame every 500ms
+
+    return () => clearInterval(interval);
+  }, [frames.length]);
+
+  return (
+    <img 
+      src={frames[currentFrame]} 
+      alt="Thinking" 
+      className="w-12 h-12 object-contain"
+    />
+  );
+}
+
 // Utility function to parse markdown bold syntax (**text**)
 function parseMarkdownBold(text) {
   const parts = [];
@@ -129,7 +155,7 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
             {from === "alma" && isTyping ? (
               <TypingText 
                 text={text} 
-                speed={15} 
+                speed={8} 
                 onComplete={() => setTypingComplete(true)}
               />
             ) : (
@@ -225,7 +251,9 @@ export default function AskAlma() {
     setError(null);
 
     try {
-      const response = await fetch("/api/chat", {
+      // Use the backend API URL - backend runs on port 5001
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const response = await fetch(`${apiUrl}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -373,7 +401,7 @@ export default function AskAlma() {
             {/* Loading indicator */}
             {isLoading && (
               <div className="flex items-center gap-2 text-gray-500 self-start">
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <ThinkingAnimation />
                 <span className="text-sm">Thinking...</span>
               </div>
             )}

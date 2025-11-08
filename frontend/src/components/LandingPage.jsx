@@ -2,6 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ArrowUp } from 'lucide-react';
 
+// Animated thinking indicator component
+function ThinkingAnimation() {
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const frames = [
+    '/thinking_frame_1.png',
+    '/thinking_frame_2.png',
+    '/thinking_frame_3.png'
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentFrame((prev) => (prev + 1) % frames.length);
+    }, 500); // Change frame every 500ms
+
+    return () => clearInterval(interval);
+  }, [frames.length]);
+
+  return (
+    <img 
+      src={frames[currentFrame]} 
+      alt="Thinking" 
+      className="w-12 h-12 object-contain"
+    />
+  );
+}
+
 const greetings = [
   "What's on your mind today?",
   "How can I help you?",
@@ -124,6 +150,15 @@ export default function LandingPage() {
           // Initial centered view
           <div className="flex-1 flex items-center justify-center">
             <div className="w-full max-w-3xl">
+              {/* Logo */}
+              <div className="flex justify-center mb-8">
+                <img
+                  src="/AskAlma_Logo.jpg"
+                  alt="AskAlma Logo"
+                  className="w-40 h-40 object-contain"
+                />
+              </div>
+              
               {/* Greeting */}
               <h2 className="text-4xl md:text-4xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-12">
                 {greeting}
@@ -205,10 +240,9 @@ export default function LandingPage() {
                       />
                     </div>
                     <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
-                      <div className="flex gap-1">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      <div className="flex items-center gap-2">
+                        <ThinkingAnimation />
+                        <span className="text-sm text-gray-600">Thinking...</span>
                       </div>
                     </div>
                   </div>
