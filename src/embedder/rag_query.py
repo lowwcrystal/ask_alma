@@ -155,7 +155,7 @@ def build_prompt(question: str, contexts: list[str], chat_history: List[Dict[str
     
     ### 1. Course Information Queries
     Answer directly and concisely:
-    - "What is [COURSE CODE] about?" → Provide course description
+    - "What is [COURSE CODE/COURSE NAME] about?" → Provide course description
     - "How many credits is [COURSE]?" → State the credits
     - "What are prerequisites for [COURSE]?" → List prerequisites
     - "When is [COURSE] offered?" → State Fall/Spring/Both
