@@ -7,8 +7,9 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { signUp } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -24,20 +25,25 @@ export default function SignupPage() {
       return;
     }
 
-    // TODO: Replace with actual API call
+    setLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock authentication - replace with real API
-      if (email && password) {
-        login({ email, name: email.split('@')[0] }, 'mock-token');
-        navigate('/chat');
+      const { data, error: signUpError } = await signUp(email, password, {
+        name: email.split('@')[0],
+      });
+
+      if (signUpError) throw signUpError;
+
+      // If email confirmation is required, show a message
+      if (data.user && !data.session) {
+        setError('Please check your email to confirm your account before signing in.');
+        setTimeout(() => navigate('/login'), 3000);
       } else {
-        setError('Please fill in all fields');
+        navigate('/chat');
       }
     } catch (err) {
-      setError('Sign up failed. Please try again.');
+      setError(err.message || 'Sign up failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -46,7 +52,6 @@ export default function SignupPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-semibold text-gray-800">Create an account</h2>
-          <p className="text-gray-600 mt-2">Sign up to get started</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-lg p-8">
@@ -65,7 +70,7 @@ export default function SignupPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#003865] focus:border-[#003865]"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
               placeholder="uni@columbia.edu"
               required
             />
@@ -80,7 +85,7 @@ export default function SignupPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#003865] focus:border-[#003865]"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
               placeholder="Create a password"
               required
             />
@@ -95,7 +100,7 @@ export default function SignupPage() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#003865] focus:border-[#003865]"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
               placeholder="Confirm your password"
               required
             />
@@ -103,9 +108,10 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            className="w-full bg-[#003865] text-white py-3 rounded-lg font-medium hover:bg-[#002d4f] transition"
+            disabled={loading}
+            className="w-full bg-[#003865] text-white py-3 rounded-lg font-medium hover:bg-[#002d4f] transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Sign up
+            {loading ? 'Signing up...' : 'Sign up'}
           </button>
 
           <p className="mt-6 text-center text-sm text-gray-600">

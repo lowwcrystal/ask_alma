@@ -10,3 +10,15 @@ body,
   margin: 0;
   padding: 0;
 }
+
+/* Remove white background from logo */
+.logo-no-bg {
+  mix-blend-mode: multiply;
+  filter: contrast(1.1);
+}
+
+/* For white backgrounds, use screen blend mode instead */
+.logo-no-bg-white-bg {
+  mix-blend-mode: screen;
+  filter: invert(1) contrast(1.2) brightness(1.1);
+}

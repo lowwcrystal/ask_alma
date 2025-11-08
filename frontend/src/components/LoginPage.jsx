@@ -6,43 +6,32 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, signInWithGoogle } = useAuth();
 
   const handleGoogleSignIn = async () => {
     try {
-      // TODO: Replace with actual Google OAuth implementation
-      // Example: window.location.href = '/api/auth/google';
-      // Or use a library like @react-oauth/google
-      
-      // For now, simulate Google login
-      await new Promise(resolve => setTimeout(resolve, 500));
-      login({ email: 'user@gmail.com', name: 'Google User' }, 'google-token');
-      navigate('/chat');
+      setError('');
+      await signInWithGoogle();
+      // Navigation will happen automatically via redirectTo in signInWithGoogle
     } catch (err) {
-      setError('Google sign-in failed. Please try again.');
+      setError(err.message || 'Google sign-in failed. Please try again.');
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    // TODO: Replace with actual API call
-    // For now, simulate login
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock authentication - replace with real API
-      if (email && password) {
-        login({ email, name: email.split('@')[0] }, 'mock-token');
-        navigate('/chat');
-      } else {
-        setError('Please enter email and password');
-      }
+      await login(email, password);
+      navigate('/chat');
     } catch (err) {
-      setError('Login failed. Please try again.');
+      setError(err.message || 'Login failed. Please check your credentials and try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -69,7 +58,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#003865] focus:border-[#003865]"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
               placeholder="uni@columbia.edu"
               required
             />
@@ -84,7 +73,7 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#003865] focus:border-[#003865]"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
               placeholder="Enter your password"
               required
             />
@@ -92,9 +81,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full bg-[#003865] text-white py-3 rounded-lg font-medium hover:bg-[#002d4f] transition"
+            disabled={loading}
+            className="w-full bg-[#003865] text-white py-3 rounded-lg font-medium hover:bg-[#002d4f] transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Log in
+            {loading ? 'Logging in...' : 'Log in'}
           </button>
 
           <p className="mt-6 text-center text-sm text-gray-600">
