@@ -1,48 +1,199 @@
-// src/components/AskAlma/AskAlma.jsx
-import React, { useState } from "react";
-import { Send, Loader2 } from "lucide-react";
+// src/components/AskAlma.jsx
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowUp, LogOut, Loader2 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+// Animated thinking indicator component
+function ThinkingAnimation() {
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const frames = [
+    '/thinking_frame_1.png',
+    '/thinking_frame_2.png',
+    '/thinking_frame_3.png'
+  ];
 
-// Chat Message component
-function ChatMessage({ from, text, sources }) {
-  const [showSources, setShowSources] = useState(false);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentFrame((prev) => (prev + 1) % frames.length);
+    }, 500); // Change frame every 500ms
+
+    return () => clearInterval(interval);
+  }, [frames.length]);
+
+  return (
+    <img 
+      src={frames[currentFrame]} 
+      alt="Thinking" 
+      className="w-12 h-12 object-contain"
+    />
+  );
+}
+
+// Utility function to parse markdown bold syntax (**text**)
+function parseMarkdownBold(text) {
+  const parts = [];
+  let currentIndex = 0;
+  const boldRegex = /\*\*(.*?)\*\*/g;
+  let match;
+  
+  while ((match = boldRegex.exec(text)) !== null) {
+    // Add text before the bold part
+    if (match.index > currentIndex) {
+      parts.push({ type: 'text', content: text.slice(currentIndex, match.index) });
+    }
+    // Add the bold part
+    parts.push({ type: 'bold', content: match[1] });
+    currentIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text after last bold part
+  if (currentIndex < text.length) {
+    parts.push({ type: 'text', content: text.slice(currentIndex) });
+  }
+  
+  return parts;
+}
+
+// Component to render parsed markdown text
+function MarkdownText({ text }) {
+  const parts = parseMarkdownBold(text);
+  
+  if (parts.length === 0) {
+    return <>{text}</>;
+  }
   
   return (
+    <>
+      {parts.map((part, idx) => (
+        part.type === 'bold' ? (
+          <strong key={idx}>{part.content}</strong>
+        ) : (
+          <React.Fragment key={idx}>{part.content}</React.Fragment>
+        )
+      ))}
+    </>
+  );
+}
+
+// Typing animation component
+function TypingText({ text, speed = 20, onComplete }) {
+  const [displayedText, setDisplayedText] = useState("");
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const timeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (currentIndex < text.length) {
+      timeoutRef.current = setTimeout(() => {
+        setDisplayedText(prev => prev + text[currentIndex]);
+        setCurrentIndex(prev => prev + 1);
+      }, speed);
+    } else if (onComplete && currentIndex === text.length && text.length > 0) {
+      onComplete();
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [currentIndex, text, speed, onComplete]);
+
+  // Reset when text changes
+  useEffect(() => {
+    setDisplayedText("");
+    setCurrentIndex(0);
+  }, [text]);
+
+  return (
+    <>
+      <MarkdownText text={displayedText} />
+      {currentIndex < text.length && (
+        <span className="inline-block w-1 h-4 bg-gray-400 animate-pulse ml-0.5" />
+      )}
+    </>
+  );
+}
+
+// Chat Message component
+function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
+  const [showSources, setShowSources] = useState(false);
+  const [typingComplete, setTypingComplete] = useState(!isTyping);
+  
+  const formatTime = (ts) => {
+    if (!ts) return '';
+    const date = new Date(ts);
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  return (
     <div
-      className={`max-w-2xl w-fit p-4 rounded-2xl ${
-        from === "alma"
-          ? "bg-white border shadow-sm self-start"
-          : "bg-almaLightBlue text-gray-900 ml-auto"
+      className={`max-w-2xl w-fit flex items-start gap-3 ${
+        from === "alma" ? "self-start" : "ml-auto flex-row-reverse"
       }`}
     >
-      <div className="whitespace-pre-wrap">{text}</div>
-      
-      {/* Show sources for AI responses */}
-      {from === "alma" && sources && sources.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-200">
-          <button
-            onClick={() => setShowSources(!showSources)}
-            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-          >
-            {showSources ? "Hide" : "Show"} sources ({sources.length})
-          </button>
+      {from === "alma" && (
+        <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+          <img
+            src="/Icon.png"
+            alt="AskAlma"
+            className="logo-no-bg"
+            style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
+          />
+        </div>
+      )}
+      <div>
+        <div
+          className={`p-4 rounded-2xl ${
+            from === "alma"
+              ? "bg-white border shadow-sm"
+              : "bg-[#B9D9EB] text-gray-900"
+          }`}
+        >
+          <div className="whitespace-pre-wrap">
+            {from === "alma" && isTyping ? (
+              <TypingText 
+                text={text} 
+                speed={8} 
+                onComplete={() => setTypingComplete(true)}
+              />
+            ) : (
+              <MarkdownText text={text} />
+            )}
+          </div>
           
-          {showSources && (
-            <div className="mt-2 space-y-2">
-              {sources.map((source, idx) => (
-                <div key={idx} className="text-xs bg-gray-50 p-2 rounded border">
-                  <div className="font-semibold text-gray-700">
-                    Source {idx + 1} (similarity: {(source.similarity * 100).toFixed(1)}%)
-                  </div>
-                  <div className="text-gray-600 mt-1">{source.content}</div>
+          {/* Show sources for AI responses - only after typing is complete */}
+          {from === "alma" && sources && sources.length > 0 && typingComplete && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <button
+                onClick={() => setShowSources(!showSources)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                {showSources ? "Hide" : "Show"} sources ({sources.length})
+              </button>
+              
+              {showSources && (
+                <div className="mt-2 space-y-2">
+                  {sources.map((source, idx) => (
+                    <div key={idx} className="text-xs bg-gray-50 p-2 rounded border">
+                      <div className="font-semibold text-gray-700">
+                        Source {idx + 1} (similarity: {(source.similarity * 100).toFixed(1)}%)
+                      </div>
+                      <div className="text-gray-600 mt-1">{source.content}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
-      )}
+        {timestamp && (
+          <p className={`text-xs text-gray-500 mt-1 ${from === "alma" ? "text-left" : "text-right"}`}>
+            {formatTime(timestamp)}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -68,26 +219,47 @@ export default function AskAlma() {
   const [conversationId, setConversationId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [latestMessageIndex, setLatestMessageIndex] = useState(-1);
+  const messagesEndRef = useRef(null);
+  const navigate = useNavigate();
+  const { logout, user } = useAuth();
+  const [searchParams] = useSearchParams();
 
-  const sendMessage = async (question) => {
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Handle search query from landing page
+  useEffect(() => {
+    const query = searchParams.get('q');
+    if (query) {
+      handleSendQuery(query);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSendQuery = async (queryText) => {
+    if (!queryText.trim() || isLoading) return;
+    
+    const now = new Date().toISOString();
+    const userMessage = { from: "user", text: queryText, timestamp: now };
+    
+    setMessages(prev => [...prev, userMessage]);
+    setShowSuggestions(false);
+    setIsLoading(true);
+    setError(null);
+
     try {
-      setIsLoading(true);
-      setError(null);
-      
-      // Add user message to UI immediately
-      const userMessage = { from: "user", text: question };
-      setMessages(prev => [...prev, userMessage]);
-      
-      // Call the API
-      const response = await fetch(`${API_URL}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: question,
-          conversation_id: conversationId
-        })
+      // Use the backend API URL - backend runs on port 5001
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const response = await fetch(`${apiUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          question: queryText, 
+          conversation_id: conversationId 
+        }),
       });
       
       if (!response.ok) {
@@ -97,17 +269,23 @@ export default function AskAlma() {
       const data = await response.json();
       
       // Update conversation ID if this is a new conversation
-      if (!conversationId) {
+      if (!conversationId && data.conversation_id) {
         setConversationId(data.conversation_id);
       }
       
-      // Add AI response to UI
+      // Add AI response to UI with typing animation
       const aiMessage = {
         from: "alma",
-        text: data.answer,
-        sources: data.sources
+        text: data.answer || data.reply || "Sorry, I couldn't get a response.",
+        sources: data.sources,
+        timestamp: new Date().toISOString()
       };
-      setMessages(prev => [...prev, aiMessage]);
+      
+      setMessages(prev => {
+        const newMessages = [...prev, aiMessage];
+        setLatestMessageIndex(newMessages.length - 1);
+        return newMessages;
+      });
       
     } catch (err) {
       console.error('Error sending message:', err);
@@ -116,25 +294,24 @@ export default function AskAlma() {
       // Add error message to chat
       const errorMessage = {
         from: "alma",
-        text: "Sorry, I encountered an error. Please make sure the backend server is running and try again."
+        text: "Sorry, I encountered an error. Please make sure the backend server is running and try again.",
+        timestamp: new Date().toISOString()
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => {
+        const newMessages = [...prev, errorMessage];
+        setLatestMessageIndex(newMessages.length - 1);
+        return newMessages;
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSend = () => {
-    if (!input.trim() || isLoading) return;
-    
-    sendMessage(input);
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text || isLoading) return;
     setInput("");
-    setShowSuggestions(false);
-  };
-
-  const handleSuggestedQuestion = (question) => {
-    sendMessage(question);
-    setShowSuggestions(false);
+    await handleSendQuery(text);
   };
 
   const startNewChat = () => {
@@ -142,6 +319,12 @@ export default function AskAlma() {
     setConversationId(null);
     setShowSuggestions(true);
     setError(null);
+    setLatestMessageIndex(-1);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
   };
 
   return (
@@ -166,7 +349,7 @@ export default function AskAlma() {
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-gray-400" />
             <div>
-              <p className="font-semibold">Columbia Student</p>
+              <p className="font-semibold">{user?.email || 'Columbia Student'}</p>
               <p className="text-xs text-gray-500 underline cursor-pointer">
                 View Profile
               </p>
@@ -177,19 +360,29 @@ export default function AskAlma() {
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="border-b p-8 flex items-center gap-4 bg-white shadow-sm">
-          <img
-            src="/AskAlma_Logo.jpg"
-            alt="AskAlma Logo"
-            className="w-16 h-16 object-contain scale-150"
-            style={{ flexShrink: 0 }}
-          />
-          <div>
-            <h1 className="text-3xl font-bold text-almaBlue tracking-tight">AskAlma</h1>
-            <p className="text-base text-gray-600">
-              Your AI Academic Advisor for Columbia University
-            </p>
+        <header className="border-b p-8 flex items-center justify-between bg-white shadow-sm">
+          <div className="flex items-center gap-4">
+            <img
+              src="/AskAlma_Logo.jpg?v=1"
+              alt="AskAlma Logo"
+              className="logo-no-bg"
+              style={{ width: '96px', height: '96px', objectFit: 'contain' }}
+            />
+            <div>
+              <h1 className="text-3xl font-bold text-almaBlue tracking-tight">AskAlma</h1>
+              <p className="text-base text-gray-600">
+                Your AI Academic Advisor for Columbia University
+              </p>
+            </div>
           </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-[#003865] hover:bg-gray-50 rounded-lg transition"
+            title="Log out"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="hidden md:inline">Log out</span>
+          </button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -200,13 +393,15 @@ export default function AskAlma() {
                 from={msg.from} 
                 text={msg.text}
                 sources={msg.sources}
+                timestamp={msg.timestamp}
+                isTyping={msg.from === "alma" && i === latestMessageIndex}
               />
             ))}
             
             {/* Loading indicator */}
             {isLoading && (
               <div className="flex items-center gap-2 text-gray-500 self-start">
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <ThinkingAnimation />
                 <span className="text-sm">Thinking...</span>
               </div>
             )}
@@ -218,50 +413,61 @@ export default function AskAlma() {
               </div>
             )}
             
-            {/* Suggested questions */}
-            {showSuggestions && messages.length === 0 && (
-              <div className="mt-6">
-                <p className="text-gray-500 mb-2 font-medium">Suggested questions:</p>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {suggested.map((q, i) => (
-                    <SuggestedQuestion
-                      key={i}
-                      text={q}
-                      onClick={() => handleSuggestedQuestion(q)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Invisible div for auto-scrolling */}
+            <div ref={messagesEndRef} />
           </div>
         </div>
 
-        {/* Input bar */}
-        <div className="border-t p-4 flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Ask about courses, registration, requirements..."
-            className="flex-1 border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            disabled={isLoading}
-          />
-          <button
-            onClick={handleSend}
-            disabled={isLoading || !input.trim()}
-            className={`bg-almaBlue text-white rounded-xl p-2 transition ${
-              isLoading || !input.trim()
-                ? 'opacity-50 cursor-not-allowed'
-                : 'hover:brightness-90'
-            }`}
-          >
-            {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
-          </button>
+        {/* Suggested questions - positioned above input bar */}
+        {showSuggestions && messages.length === 0 && (
+          <div className="px-6 py-3">
+            <p className="text-gray-500 mb-2 font-medium">Suggested questions:</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {suggested.map((q, i) => (
+                <SuggestedQuestion
+                  key={i}
+                  text={q}
+                  onClick={() => handleSendQuery(q)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Input bar - ChatGPT style */}
+        <div className="bg-white p-4">
+          <div className="max-w-3xl mx-auto flex items-end gap-2">
+            <div className="flex-1 relative">
+              <textarea
+                placeholder="Message AskAlma..."
+                className="w-full px-4 py-3 pr-12 border-0 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                rows={1}
+              />
+              <button
+                onClick={handleSend}
+                disabled={isLoading || !input.trim()}
+                className={`absolute right-2 bottom-2 p-2 rounded-lg transition ${
+                  isLoading || !input.trim()
+                    ? "bg-gray-300 cursor-not-allowed"
+                    : "bg-[#003865] text-white hover:bg-[#002d4f]"
+                }`}
+              >
+                <ArrowUp className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
