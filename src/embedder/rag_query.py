@@ -9,16 +9,12 @@ from dotenv import load_dotenv
 import uuid
 
 # Load environment variables (OPENAI_API_KEY, DATABASE_URL)
-# Try multiple locations: root .env, src/embedder/.env, then default
-root_env = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+# Load from .env in the same directory as this file
 local_env = os.path.join(os.path.dirname(__file__), '.env')
-
-if os.path.exists(root_env):
-    load_dotenv(root_env)
-elif os.path.exists(local_env):
+if os.path.exists(local_env):
     load_dotenv(local_env)
 else:
-    load_dotenv() 
+    load_dotenv()  # Fall back to default location 
 
 # Embeddings + LLM
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI

@@ -9,9 +9,9 @@ import sys
 import os
 from dotenv import load_dotenv
 
-# Load .env from project root before importing rag_query
+# Load .env from src/embedder/.env before importing rag_query
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env_path = os.path.join(project_root, '.env')
+env_path = os.path.join(project_root, 'src', 'embedder', '.env')
 if os.path.exists(env_path):
     load_dotenv(env_path, override=True)
 else:

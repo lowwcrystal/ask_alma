@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ArrowUp } from 'lucide-react';
 
@@ -54,6 +54,9 @@ export default function LandingPage() {
   const [isSending, setIsSending] = useState(false);
   const [conversationId, setConversationId] = useState(null);
   const navigate = useNavigate();
+  const [typingMessageIndex, setTypingMessageIndex] = useState(null);
+  const [displayedText, setDisplayedText] = useState('');
+  const messagesEndRef = useRef(null);
 
   // Set random greeting on mount
   useEffect(() => {
@@ -70,6 +73,32 @@ export default function LandingPage() {
 
     return () => clearInterval(interval);
   }, [showChat]);
+
+  // Typewriter effect for AI responses
+  useEffect(() => {
+    if (typingMessageIndex === null) return;
+    
+    const message = messages[typingMessageIndex];
+    if (!message || message.from !== 'alma') return;
+    
+    const fullText = message.text;
+    let currentIndex = 0;
+    
+    const typingInterval = setInterval(() => {
+      if (currentIndex <= fullText.length) {
+        setDisplayedText(fullText.slice(0, currentIndex));
+        currentIndex++;
+        // Auto-scroll as typing progresses
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        clearInterval(typingInterval);
+        setTypingMessageIndex(null);
+        setDisplayedText('');
+      }
+    }, 20); // Adjust speed here (lower = faster)
+    
+    return () => clearInterval(typingInterval);
+  }, [typingMessageIndex, messages]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -107,10 +136,18 @@ export default function LandingPage() {
         setConversationId(data.conversation_id);
       }
       
-      setMessages((prev) => [...prev, { from: 'alma', text: reply, sources: data?.sources, timestamp: new Date().toISOString() }]);
+      setMessages((prev) => {
+        const newMessages = [...prev, { from: 'alma', text: reply, sources: data?.sources, timestamp: new Date().toISOString() }];
+        setTypingMessageIndex(newMessages.length - 1);
+        return newMessages;
+      });
     } catch (e) {
       console.error('Error calling API:', e);
-      setMessages((prev) => [...prev, { from: 'alma', text: "Network error. Please try again.", timestamp: new Date().toISOString() }]);
+      setMessages((prev) => {
+        const newMessages = [...prev, { from: 'alma', text: "Network error. Please try again.", timestamp: new Date().toISOString() }];
+        setTypingMessageIndex(newMessages.length - 1);
+        return newMessages;
+      });
     } finally {
       setIsSending(false);
     }
@@ -209,7 +246,8 @@ export default function LandingPage() {
                               : 'bg-white border shadow-sm'
                           }`}
                         >
-                          {msg.text}
+                          {typingMessageIndex === i && msg.from === 'alma' ? displayedText : msg.text}
+                          {typingMessageIndex === i && msg.from === 'alma' && <span className="animate-pulse">|</span>}
                         </div>
                         {msg.timestamp && (
                           <p className={`text-xs text-gray-500 mt-1 ${msg.from === 'user' ? 'text-right' : 'text-left'}`}>
@@ -238,10 +276,11 @@ export default function LandingPage() {
                     </div>
                   </div>
                 )}
+                <div ref={messagesEndRef} />
               </div>
             </div>
             {/* ChatGPT style input at bottom */}
-            <div className="bg-white p-4">
+            <div className=" p-4">
               <div className="max-w-3xl mx-auto flex items-end gap-2">
                 <div className="flex-1 relative">
                   <textarea
