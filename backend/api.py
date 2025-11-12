@@ -32,7 +32,8 @@ def chat():
     Request body:
     {
         "question": "What are the core classes?",
-        "conversation_id": "uuid-string" (optional - null for new conversation)
+        "conversation_id": "uuid-string" (optional - null for new conversation),
+        "user_id": "user-uuid" (optional - Supabase user ID)
     }
     
     Response:
@@ -53,6 +54,7 @@ def chat():
         data = request.json
         question = data.get('question')
         conversation_id = data.get('conversation_id')  # None for new conversation
+        user_id = data.get('user_id')  # Supabase user ID (optional)
         
         if not question:
             return jsonify({'error': 'Question is required'}), 400
@@ -61,6 +63,7 @@ def chat():
         result = rag_answer(
             question=question,
             conversation_id=conversation_id,
+            user_id=user_id,
             save_to_db=True
         )
         
@@ -136,7 +139,10 @@ def get_conversation(conversation_id):
 @app.route('/api/conversations', methods=['GET'])
 def list_conversations():
     """
-    List recent conversations
+    List recent conversations for a specific user
+    
+    Query Parameters:
+        user_id: (optional) Supabase user ID to filter conversations
     
     Response:
     {
@@ -151,21 +157,40 @@ def list_conversations():
     }
     """
     try:
+        user_id = request.args.get('user_id')  # Get user_id from query params
+        
         conn = get_pg_conn()
         cur = conn.cursor()
         
-        cur.execute("""
-            SELECT 
-                c.id,
-                c.title,
-                c.updated_at,
-                COUNT(m.id) as message_count
-            FROM conversations c
-            LEFT JOIN messages m ON c.id = m.conversation_id
-            GROUP BY c.id, c.title, c.updated_at
-            ORDER BY c.updated_at DESC
-            LIMIT 20;
-        """)
+        # Filter by user_id if provided
+        if user_id:
+            cur.execute("""
+                SELECT 
+                    c.id,
+                    c.title,
+                    c.updated_at,
+                    COUNT(m.id) as message_count
+                FROM conversations c
+                LEFT JOIN messages m ON c.id = m.conversation_id
+                WHERE c.user_id = %s
+                GROUP BY c.id, c.title, c.updated_at
+                ORDER BY c.updated_at DESC
+                LIMIT 20;
+            """, (user_id,))
+        else:
+            # No user_id provided - return all conversations (for backwards compatibility)
+            cur.execute("""
+                SELECT 
+                    c.id,
+                    c.title,
+                    c.updated_at,
+                    COUNT(m.id) as message_count
+                FROM conversations c
+                LEFT JOIN messages m ON c.id = m.conversation_id
+                GROUP BY c.id, c.title, c.updated_at
+                ORDER BY c.updated_at DESC
+                LIMIT 20;
+            """)
         
         conversations = cur.fetchall()
         cur.close()
