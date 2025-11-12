@@ -220,6 +220,7 @@ export default function AskAlma() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [latestMessageIndex, setLatestMessageIndex] = useState(-1);
+  const [conversations, setConversations] = useState([]);
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
   const { logout, user } = useAuth();
@@ -229,6 +230,26 @@ export default function AskAlma() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Fetch user's conversations on mount
+  useEffect(() => {
+    const fetchConversations = async () => {
+      if (!user?.id) return; // Only fetch if user is logged in
+      
+      try {
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+        const response = await fetch(`${apiUrl}/api/conversations?user_id=${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setConversations(data.conversations || []);
+        }
+      } catch (err) {
+        console.error('Error fetching conversations:', err);
+      }
+    };
+
+    fetchConversations();
+  }, [user]);
 
   // Handle search query from landing page
   useEffect(() => {
@@ -258,7 +279,8 @@ export default function AskAlma() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           question: queryText, 
-          conversation_id: conversationId 
+          conversation_id: conversationId,
+          user_id: user?.id  // Include user ID if logged in
         }),
       });
       
@@ -271,6 +293,8 @@ export default function AskAlma() {
       // Update conversation ID if this is a new conversation
       if (!conversationId && data.conversation_id) {
         setConversationId(data.conversation_id);
+        // Refresh conversations list to show the new conversation
+        fetchConversations();
       }
       
       // Add AI response to UI with typing animation
@@ -314,6 +338,52 @@ export default function AskAlma() {
     await handleSendQuery(text);
   };
 
+  const fetchConversations = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const response = await fetch(`${apiUrl}/api/conversations?user_id=${user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setConversations(data.conversations || []);
+      }
+    } catch (err) {
+      console.error('Error fetching conversations:', err);
+    }
+  };
+
+  const loadConversation = async (convId) => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const response = await fetch(`${apiUrl}/api/conversations/${convId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load conversation: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Convert backend message format to frontend format
+      const loadedMessages = data.messages.map(msg => ({
+        from: msg.role === 'user' ? 'user' : 'alma',
+        text: msg.content,
+        timestamp: msg.created_at,
+        sources: msg.metadata?.sources || [] // Include sources if available
+      }));
+      
+      // Update state with loaded conversation
+      setConversationId(convId);
+      setMessages(loadedMessages);
+      setShowSuggestions(false);
+      setError(null);
+      setLatestMessageIndex(-1); // Don't animate old messages
+    } catch (err) {
+      console.error('Error loading conversation:', err);
+      setError('Failed to load conversation. Please try again.');
+    }
+  };
+
   const startNewChat = () => {
     setMessages([]);
     setConversationId(null);
@@ -338,21 +408,37 @@ export default function AskAlma() {
           + New Chat
         </button>
         
-        {conversationId && (
-          <div className="text-xs text-gray-500 mb-4 p-2 bg-white rounded border">
-            <div className="font-semibold mb-1">Current Chat</div>
-            <div className="truncate">{conversationId}</div>
-          </div>
-        )}
+        {/* Conversations List */}
+        <div className="flex-1 overflow-y-auto mb-4">
+          <h3 className="text-xs font-semibold text-gray-600 mb-2 px-2">Your Chats</h3>
+          {conversations.length === 0 ? (
+            <p className="text-xs text-gray-500 px-2">No conversations yet</p>
+          ) : (
+            <div className="space-y-1">
+              {conversations.map((conv) => (
+                <button
+                  key={conv.id}
+                  onClick={() => loadConversation(conv.id)}
+                  className={`w-full text-left p-2 rounded text-sm hover:bg-gray-200 transition ${
+                    conversationId === conv.id ? 'bg-gray-200' : 'bg-white'
+                  }`}
+                >
+                  <div className="truncate font-medium">{conv.title}</div>
+                  <div className="text-xs text-gray-500">
+                    {conv.message_count} messages
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         
-        <div className="mt-auto text-sm text-gray-600">
+        <div className="text-sm text-gray-600 border-t pt-3">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-gray-400" />
             <div>
-              <p className="font-semibold">{user?.email || 'Columbia Student'}</p>
-              <p className="text-xs text-gray-500 underline cursor-pointer">
-                View Profile
-              </p>
+              <p className="font-semibold truncate">{user?.email || 'Columbia Student'}</p>
+              <p className="text-xs text-gray-500">View Profile</p>
             </div>
           </div>
         </div>

@@ -69,10 +69,13 @@ def get_pg_conn():
 # -------------------------------
 # Conversation Management
 # -------------------------------
-def create_conversation(conn) -> str:
+def create_conversation(conn, user_id=None) -> str:
     """Create a new conversation and return its ID."""
     cur = conn.cursor()
-    cur.execute("INSERT INTO conversations DEFAULT VALUES RETURNING id;")
+    if user_id:
+        cur.execute("INSERT INTO conversations (user_id) VALUES (%s) RETURNING id;", (user_id,))
+    else:
+        cur.execute("INSERT INTO conversations DEFAULT VALUES RETURNING id;")
     conversation_id = cur.fetchone()["id"]
     conn.commit()
     cur.close()
@@ -276,6 +279,7 @@ def build_prompt(question: str, contexts: list[str], chat_history: List[Dict[str
 def rag_answer(
     question: str, 
     conversation_id: Optional[str] = None,
+    user_id: Optional[str] = None,
     table_name: str = "documents", 
     probes: int = 10,
     save_to_db: bool = True
@@ -307,7 +311,7 @@ def rag_answer(
         chat_history = get_conversation_history(conn, conversation_id)
     elif save_to_db:
         # Create a new conversation
-        conversation_id = create_conversation(conn)
+        conversation_id = create_conversation(conn, user_id=user_id)
     
     # 2) Get query embedding
     embedder = OpenAIEmbeddings(model=EMBED_MODEL)
