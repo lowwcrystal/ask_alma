@@ -9,7 +9,16 @@ from dotenv import load_dotenv
 import uuid
 
 # Load environment variables (OPENAI_API_KEY, DATABASE_URL)
-load_dotenv()
+# Try multiple locations: root .env, src/embedder/.env, then default
+root_env = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+local_env = os.path.join(os.path.dirname(__file__), '.env')
+
+if os.path.exists(root_env):
+    load_dotenv(root_env)
+elif os.path.exists(local_env):
+    load_dotenv(local_env)
+else:
+    load_dotenv() 
 
 # Embeddings + LLM
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
@@ -51,8 +60,8 @@ LLM_TEMPERATURE = 0.2              # 0 = deterministic, 1 = creative
 # Helpers
 # -------------------------------
 def get_pg_conn():
-    """Connect to Supabase Postgres using either DATABASE_URL"""
-    load_dotenv()
+   
+    
     url = os.getenv("DATABASE_URL")
     if url:
         if "sslmode=" not in url:

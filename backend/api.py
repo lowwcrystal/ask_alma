@@ -7,6 +7,15 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sys
 import os
+from dotenv import load_dotenv
+
+# Load .env from project root before importing rag_query
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(project_root, '.env')
+if os.path.exists(env_path):
+    load_dotenv(env_path, override=True)
+else:
+    load_dotenv(override=True)
 
 # Add parent directory to path to import rag_query
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))

@@ -117,7 +117,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex flex-col">
+    <div className="min-h-screen bg-almaGray flex flex-col">
       {/* Header */}
       <header className="w-full px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -150,15 +150,6 @@ export default function LandingPage() {
           // Initial centered view
           <div className="flex-1 flex items-center justify-center">
             <div className="w-full max-w-3xl">
-              {/* Logo */}
-              <div className="flex justify-center mb-8">
-                <img
-                  src="/AskAlma_Logo.jpg"
-                  alt="AskAlma Logo"
-                  className="w-40 h-40 object-contain"
-                />
-              </div>
-              
               {/* Greeting */}
               <h2 className="text-4xl md:text-4xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-12">
                 {greeting}
@@ -172,15 +163,15 @@ export default function LandingPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder={placeholders[placeholderIndex]}
-                    className="w-full px-6 py-4 pr-14 text-lg bg-white text-gray-900 placeholder-gray-400 border-0 rounded-full focus:outline-none focus:ring-0 shadow-lg transition-all"
+                    className="w-full px-6 py-4 pr-14 text-lg bg-white text-gray-900 placeholder-gray-400 border-0 rounded-full focus:outline-none focus:ring-0 shadow-lg transition-all peer"
                     style={{ outline: 'none' }}
                   />
                   <button
                     type="submit"
-                    className="absolute right-3 p-2 hover:opacity-70 transition-opacity"
+                    className="absolute right-3 p-2 rounded-full transition-all text-[#003865] peer-focus:bg-[#003865] peer-focus:text-white hover:opacity-70"
                     aria-label="Search"
                   >
-                    <Search className="w-5 h-5 text-[#003865]" />
+                    <Search className="w-5 h-5" />
                   </button>
                 </div>
               </form>
