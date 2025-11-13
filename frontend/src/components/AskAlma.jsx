@@ -271,7 +271,7 @@ export default function AskAlma() {
 
     try {
       // Use the backend API URL - backend runs on port 5001
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -1,16 +1,8 @@
 {
-  "version": 2,
   "builds": [
     {
       "src": "api/app.py",
       "use": "@vercel/python"
-    },
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
     }
   ],
   "routes": [
@@ -19,12 +11,8 @@
       "dest": "api/app.py"
     },
     {
-      "src": "/(.*\\.(js|css|png|jpg|jpeg|svg|ico|json|txt))",
-      "dest": "frontend/$1"
-    },
-    {
       "src": "/(.*)",
-      "dest": "frontend/index.html"
+      "dest": "/api/app.py"
     }
   ]
 }

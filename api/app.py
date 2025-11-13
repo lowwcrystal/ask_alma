@@ -167,8 +167,10 @@ def list_conversations():
     """
     try:
         user_id = request.args.get('user_id')  # Get user_id from query params
+        print(f"Fetching conversations for user_id: {user_id}")
         
         conn = get_pg_conn()
+        print(f"Database connection established: {conn is not None}")
         cur = conn.cursor()
         
         # Filter by user_id if provided
@@ -202,6 +204,7 @@ def list_conversations():
             """)
         
         conversations = cur.fetchall()
+        print(f"Found {len(conversations)} conversations")
         cur.close()
         conn.close()
         
@@ -219,8 +222,10 @@ def list_conversations():
         return jsonify({'conversations': result})
     
     except Exception as e:
+        import traceback
         print(f"Error in /api/conversations: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(traceback.format_exc())
+        return jsonify({'error': f'Failed to fetch conversations: {str(e)}'}), 500
 
 
 @app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
