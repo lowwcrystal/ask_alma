@@ -3,7 +3,7 @@ Flask API for AskAlma RAG System
 Connects React frontend to the conversation-enabled RAG backend
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sys
 import os
@@ -21,7 +21,7 @@ else:
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from src.embedder.rag_query import rag_answer, get_conversation_history, get_pg_conn
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
 CORS(app)  # Enable CORS for React frontend
 
 @app.route('/api/health', methods=['GET'])
@@ -291,6 +291,17 @@ def update_conversation(conversation_id):
     except Exception as e:
         print(f"Error updating conversation: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+# Serve React App (catch-all route must be last)
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    """Serve React frontend"""
+    if path and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
 
 
 if __name__ == '__main__':
