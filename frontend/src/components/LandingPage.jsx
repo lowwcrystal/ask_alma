@@ -61,31 +61,43 @@ function MarkdownText({ text }) {
   );
 }
 
-// Animated thinking indicator component
-function ThinkingAnimation() {
+// Thinking animation frames (constant, defined outside component)
+const THINKING_FRAMES = [
+  '/thinking_frame_1.png',
+  '/thinking_frame_2.png',
+  '/thinking_frame_3.png'
+];
+
+// Animated thinking indicator component (memoized for performance)
+const ThinkingAnimation = React.memo(function ThinkingAnimation() {
   const [currentFrame, setCurrentFrame] = useState(0);
-  const frames = [
-    '/thinking_frame_1.png',
-    '/thinking_frame_2.png',
-    '/thinking_frame_3.png'
-  ];
+
+  // Preload all frames for smooth animation
+  useEffect(() => {
+    THINKING_FRAMES.forEach(frame => {
+      const img = new Image();
+      img.src = frame;
+    });
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentFrame((prev) => (prev + 1) % frames.length);
+      setCurrentFrame((prev) => (prev + 1) % THINKING_FRAMES.length);
     }, 500); // Change frame every 500ms
 
     return () => clearInterval(interval);
-  }, [frames.length]);
+  }, []);
 
   return (
     <img 
-      src={frames[currentFrame]} 
+      src={THINKING_FRAMES[currentFrame]} 
       alt="Thinking" 
       className="w-12 h-12 object-contain"
+      loading="eager"
+      decoding="async"
     />
   );
-}
+});
 
 const greetings = [
   "What's on your mind today?",
@@ -219,6 +231,9 @@ export default function LandingPage() {
             src="/AskAlma_Logo.jpg"
             alt="AskAlma Logo"
             className="w-10 h-10 object-contain logo-no-bg"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
           />
           <h1 className="text-2xl font-bold text-[#003865]">AskAlma</h1>
         </div>

@@ -3,11 +3,12 @@ Flask API for AskAlma RAG System
 Connects React frontend to the conversation-enabled RAG backend
 """
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from flask_cors import CORS
 import sys
 import os
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
 # Load .env from src/embedder/.env before importing rag_query
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,7 +23,14 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from src.embedder.rag_query import rag_answer, get_conversation_history, get_pg_conn
 
 app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
-CORS(app)  # Enable CORS for React frontend
+# Enable CORS for React frontend with explicit origins
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000", "*"],
+        "methods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -297,11 +305,30 @@ def update_conversation(conversation_id):
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    """Serve React frontend"""
+    """Serve React frontend with optimized caching"""
     if path and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
+        response = send_from_directory(app.static_folder, path)
+        
+        # Add cache headers for static assets
+        if path.endswith(('.js', '.css', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2')):
+            # Cache static assets for 1 year (with versioning in filename)
+            response.cache_control.max_age = 31536000
+            response.cache_control.public = True
+            response.cache_control.immutable = True
+        elif path.endswith('.html'):
+            # Don't cache HTML files
+            response.cache_control.no_cache = True
+            response.cache_control.no_store = True
+            response.cache_control.must_revalidate = True
+        
+        return response
     else:
-        return send_from_directory(app.static_folder, 'index.html')
+        # Don't cache index.html
+        response = send_from_directory(app.static_folder, 'index.html')
+        response.cache_control.no_cache = True
+        response.cache_control.no_store = True
+        response.cache_control.must_revalidate = True
+        return response
 
 
 if __name__ == '__main__':

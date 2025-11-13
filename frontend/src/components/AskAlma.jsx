@@ -18,31 +18,43 @@ const getApiUrl = () => {
   return 'http://localhost:5001';
 };
 
-// Animated thinking indicator component
-function ThinkingAnimation() {
+// Thinking animation frames (constant, defined outside component)
+const THINKING_FRAMES = [
+  '/thinking_frame_1.png',
+  '/thinking_frame_2.png',
+  '/thinking_frame_3.png'
+];
+
+// Animated thinking indicator component (memoized for performance)
+const ThinkingAnimation = React.memo(function ThinkingAnimation() {
   const [currentFrame, setCurrentFrame] = useState(0);
-  const frames = [
-    '/thinking_frame_1.png',
-    '/thinking_frame_2.png',
-    '/thinking_frame_3.png'
-  ];
+
+  // Preload all frames for smooth animation
+  useEffect(() => {
+    THINKING_FRAMES.forEach(frame => {
+      const img = new Image();
+      img.src = frame;
+    });
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentFrame((prev) => (prev + 1) % frames.length);
+      setCurrentFrame((prev) => (prev + 1) % THINKING_FRAMES.length);
     }, 500); // Change frame every 500ms
 
     return () => clearInterval(interval);
-  }, [frames.length]);
+  }, []);
 
   return (
     <img 
-      src={frames[currentFrame]} 
+      src={THINKING_FRAMES[currentFrame]} 
       alt="Thinking" 
       className="w-12 h-12 object-contain"
+      loading="eager"
+      decoding="async"
     />
   );
-}
+});
 
 // Utility function to parse markdown bold syntax (**text**)
 function parseMarkdownBold(text) {
@@ -150,6 +162,8 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
             alt="AskAlma"
             className="logo-no-bg"
             style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
+            loading="lazy"
+            decoding="async"
           />
         </div>
       )}
@@ -351,7 +365,7 @@ export default function AskAlma() {
     if (!user?.id) return;
     
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/conversations?user_id=${user.id}`);
       if (response.ok) {
         const data = await response.json();
@@ -364,11 +378,13 @@ export default function AskAlma() {
 
   const loadConversation = async (convId) => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/conversations/${convId}`);
       
       if (!response.ok) {
-        throw new Error(`Failed to load conversation: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('API Error:', response.status, errorText);
+        throw new Error(`Failed to load conversation: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
@@ -390,7 +406,12 @@ export default function AskAlma() {
       setMobileMenuOpen(false); // Close mobile menu after loading conversation
     } catch (err) {
       console.error('Error loading conversation:', err);
-      setError('Failed to load conversation. Please try again.');
+      // Check if it's a network/CORS error
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        setError('Cannot connect to server. Make sure the backend is running on port 5001.');
+      } else {
+        setError(`Failed to load conversation: ${err.message}`);
+      }
     }
   };
 
@@ -606,6 +627,9 @@ export default function AskAlma() {
               src="/AskAlma_Logo.jpg?v=1"
               alt="AskAlma Logo"
               className="md:w-24 md:h-24 w-12 h-12 logo-no-bg object-contain"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
             />
             <div>
               <h1 className="text-xl md:text-3xl font-bold text-[#003865] tracking-tight">AskAlma</h1>
