@@ -18,34 +18,36 @@ const getApiUrl = () => {
   return 'http://localhost:5001';
 };
 
+// Thinking animation frames (constant, defined outside component)
+const THINKING_FRAMES = [
+  '/thinking_frame_1.png',
+  '/thinking_frame_2.png',
+  '/thinking_frame_3.png'
+];
 
+// Animated thinking indicator component (memoized for performance)
 const ThinkingAnimation = React.memo(function ThinkingAnimation() {
   const [currentFrame, setCurrentFrame] = useState(0);
-  const frames = [
-    '/thinking_frame_1.png',
-    '/thinking_frame_2.png',
-    '/thinking_frame_3.png'
-  ];
 
   // Preload all frames for smooth animation
   useEffect(() => {
-    frames.forEach(frame => {
+    THINKING_FRAMES.forEach(frame => {
       const img = new Image();
       img.src = frame;
     });
-  }, []); 
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentFrame((prev) => (prev + 1) % frames.length);
+      setCurrentFrame((prev) => (prev + 1) % THINKING_FRAMES.length);
     }, 500); // Change frame every 500ms
 
     return () => clearInterval(interval);
-  }, [frames.length]);
+  }, []);
 
   return (
     <img 
-      src={frames[currentFrame]} 
+      src={THINKING_FRAMES[currentFrame]} 
       alt="Thinking" 
       className="w-12 h-12 object-contain"
       loading="eager"
