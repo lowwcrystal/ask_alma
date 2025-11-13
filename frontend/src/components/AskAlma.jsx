@@ -1,7 +1,7 @@
 // src/components/AskAlma.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUp, LogOut } from "lucide-react";
+import { ArrowUp, LogOut, Menu, X, MoreVertical } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 
@@ -214,6 +214,8 @@ export default function AskAlma() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [editingConvId, setEditingConvId] = useState(null);
   const [editingValue, setEditingValue] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileConvMenu, setMobileConvMenu] = useState(null);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -257,6 +259,15 @@ export default function AskAlma() {
       return () => document.removeEventListener('click', handleClick);
     }
   }, [contextMenu]);
+
+  // Close mobile conversation menu when clicking outside
+  useEffect(() => {
+    const handleClick = () => setMobileConvMenu(null);
+    if (mobileConvMenu) {
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [mobileConvMenu]);
 
   const handleSendQuery = async (queryText) => {
     if (!queryText.trim() || isLoading) return;
@@ -376,6 +387,7 @@ export default function AskAlma() {
       setShowSuggestions(false);
       setError(null);
       setLatestMessageIndex(-1); // Don't animate old messages
+      setMobileMenuOpen(false); // Close mobile menu after loading conversation
     } catch (err) {
       console.error('Error loading conversation:', err);
       setError('Failed to load conversation. Please try again.');
@@ -388,6 +400,7 @@ export default function AskAlma() {
     setShowSuggestions(false);
     setError(null);
     setLatestMessageIndex(-1);
+    setMobileMenuOpen(false); // Close mobile menu after starting new chat
   };
 
   const handleLogout = () => {
@@ -463,8 +476,23 @@ export default function AskAlma() {
 
   return (
     <div className="flex w-screen h-screen bg-almaGray">
+      {/* Mobile overlay backdrop */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="w-64 bg-gray-100 border-r p-4 flex flex-col">
+      <div className={`
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:translate-x-0
+        fixed md:relative
+        w-64 bg-gray-100 border-r p-4 flex flex-col
+        z-50 h-full
+        transition-transform duration-300 ease-in-out
+      `}>
         <button 
           onClick={startNewChat}
           className="bg-almaLightBlue text-gray-900 font-medium rounded-lg py-2 mb-4 hover:brightness-95 transition"
@@ -504,16 +532,55 @@ export default function AskAlma() {
                     />
                   </div>
                 ) : (
-                  <button
+                  <div
                     key={conv.id}
-                    onClick={() => loadConversation(conv.id)}
-                    onContextMenu={(e) => handleContextMenu(e, conv)}
-                    className={`w-full text-left p-2 rounded text-sm hover:bg-[#B9D9EB] transition ${
+                    className={`w-full flex items-center gap-2 p-2 rounded text-sm hover:bg-[#B9D9EB] transition ${
                       conversationId === conv.id ? 'bg-gray-200' : ''
                     }`}
                   >
-                    <div className="truncate font-normal">{conv.title}</div>
-                  </button>
+                    <button
+                      onClick={() => loadConversation(conv.id)}
+                      onContextMenu={(e) => handleContextMenu(e, conv)}
+                      className="flex-1 text-left truncate font-normal"
+                    >
+                      {conv.title}
+                    </button>
+                    {/* Mobile three-dot menu */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMobileConvMenu(mobileConvMenu === conv.id ? null : conv.id);
+                      }}
+                      className="md:hidden p-1 hover:bg-gray-200 rounded"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    {/* Mobile dropdown menu */}
+                    {mobileConvMenu === conv.id && (
+                      <div className="absolute right-8 bg-white border shadow-lg rounded-lg py-1 z-50">
+                        <button
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                          onClick={() => {
+                            startRenaming(conv);
+                            setMobileConvMenu(null);
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
+                          onClick={() => {
+                            setMobileConvMenu(null);
+                            if (window.confirm("This can't be undone. Confirm below to continue")) {
+                              handleDeleteConversation(conv.id);
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )
               ))}
             </div>
@@ -532,33 +599,42 @@ export default function AskAlma() {
       </div>
 
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="border-b p-8 flex items-center justify-between bg-white shadow-sm">
-          <div className="flex items-center gap-4">
+      <div className="flex-1 flex flex-col min-w-0 h-screen">
+        <header className="flex-shrink-0 border-b p-4 md:p-8 flex items-center justify-between bg-white shadow-sm">
+          <div className="flex items-center gap-2 md:gap-4">
             <img
               src="/AskAlma_Logo.jpg?v=1"
               alt="AskAlma Logo"
-              className="logo-no-bg"
-              style={{ width: '96px', height: '96px', objectFit: 'contain' }}
+              className="md:w-24 md:h-24 w-12 h-12 logo-no-bg object-contain"
             />
             <div>
-              <h1 className="text-3xl font-bold text-[#003865] tracking-tight">AskAlma</h1>
-              <p className="text-base text-gray-600">
+              <h1 className="text-xl md:text-3xl font-bold text-[#003865] tracking-tight">AskAlma</h1>
+              <p className="text-xs md:text-base text-gray-600 hidden sm:block">
                 Your AI Academic Advisor for Columbia University
               </p>
             </div>
           </div>
+          
+          {/* Desktop logout button */}
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-[#003865] hover:bg-gray-50 rounded-lg transition"
+            className="hidden md:flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-[#003865] hover:bg-gray-50 rounded-lg transition"
             title="Log out"
           >
             <LogOut className="w-5 h-5" />
-            <span className="hidden md:inline">Log out</span>
+            <span>Log out</span>
+          </button>
+
+          {/* Mobile hamburger menu */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 hover:bg-gray-100 rounded-lg"
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
           <div className="flex flex-col space-y-4">
             {messages.map((msg, i) => (
               <ChatMessage 
@@ -605,9 +681,10 @@ export default function AskAlma() {
 
         {/* Suggested questions - positioned above input bar */}
         {showSuggestions && messages.length <= 1 && (
-          <div className="px-6 py-3">
-            <p className="text-gray-500 mb-2 font-medium">Suggested questions:</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          <div className="flex-shrink-0 px-6 py-3 bg-almaGray">
+            <div className="max-w-5xl mx-auto">
+              <p className="text-gray-500 mb-2 font-medium hidden md:block">Suggested questions:</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {suggested.map((q, i) => (
                 <SuggestedQuestion
                   key={i}
@@ -615,13 +692,14 @@ export default function AskAlma() {
                   onClick={() => handleSendQuery(q)}
                 />
               ))}
+              </div>
             </div>
           </div>
         )}
 
         {/* Input bar - ChatGPT style */}
-        <div className=" p-4">
-          <div className="max-w-3xl mx-auto flex items-end gap-2">
+        <div className="flex-shrink-0 p-4 bg-almaGray">
+          <div className="max-w-5xl mx-auto flex items-end gap-2">
             <div className="flex-1 relative">
               <textarea
                 placeholder="Message AskAlma..."

@@ -15,6 +15,52 @@ const getApiUrl = () => {
   return 'http://localhost:5001';
 };
 
+// Utility function to parse markdown bold syntax (**text**)
+function parseMarkdownBold(text) {
+  const parts = [];
+  let currentIndex = 0;
+  const boldRegex = /\*\*(.*?)\*\*/g;
+  let match;
+  
+  while ((match = boldRegex.exec(text)) !== null) {
+    // Add text before the bold part
+    if (match.index > currentIndex) {
+      parts.push({ type: 'text', content: text.slice(currentIndex, match.index) });
+    }
+    // Add the bold part
+    parts.push({ type: 'bold', content: match[1] });
+    currentIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text after last bold part
+  if (currentIndex < text.length) {
+    parts.push({ type: 'text', content: text.slice(currentIndex) });
+  }
+  
+  return parts;
+}
+
+// Component to render parsed markdown text
+function MarkdownText({ text }) {
+  const parts = parseMarkdownBold(text);
+  
+  if (parts.length === 0) {
+    return <>{text}</>;
+  }
+  
+  return (
+    <>
+      {parts.map((part, idx) => (
+        part.type === 'bold' ? (
+          <strong key={idx}>{part.content}</strong>
+        ) : (
+          <React.Fragment key={idx}>{part.content}</React.Fragment>
+        )
+      ))}
+    </>
+  );
+}
+
 // Animated thinking indicator component
 function ThinkingAnimation() {
   const [currentFrame, setCurrentFrame] = useState(0);
@@ -101,8 +147,6 @@ export default function LandingPage() {
       if (currentIndex <= fullText.length) {
         setDisplayedText(fullText.slice(0, currentIndex));
         currentIndex++;
-        // Auto-scroll as typing progresses
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       } else {
         clearInterval(typingInterval);
         setTypingMessageIndex(null);
@@ -167,9 +211,9 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-almaGray flex flex-col">
+    <div className="h-screen bg-almaGray flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="w-full px-6 py-4 flex items-center justify-between">
+      <header className="flex-shrink-0 w-full px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img
             src="/AskAlma_Logo.jpg"
@@ -195,10 +239,10 @@ export default function LandingPage() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col px-6">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {!showChat ? (
           // Initial centered view
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center px-6">
             <div className="w-full max-w-3xl">
               {/* Greeting */}
               <h2 className="text-4xl md:text-4xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-12">
@@ -230,7 +274,7 @@ export default function LandingPage() {
         ) : (
           // Chat view
           <>
-            <div className="flex-1 overflow-y-auto py-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4">
               <div className="max-w-3xl mx-auto flex flex-col space-y-4">
                 {messages.map((msg, i) => {
                   const formatTime = (ts) => {
@@ -259,8 +303,16 @@ export default function LandingPage() {
                               : 'bg-white border shadow-sm'
                           }`}
                         >
-                          {typingMessageIndex === i && msg.from === 'alma' ? displayedText : msg.text}
-                          {typingMessageIndex === i && msg.from === 'alma' && <span className="animate-pulse">|</span>}
+                          <div className="whitespace-pre-wrap">
+                            {typingMessageIndex === i && msg.from === 'alma' ? (
+                              <>
+                                <MarkdownText text={displayedText} />
+                                <span className="animate-pulse">|</span>
+                              </>
+                            ) : (
+                              <MarkdownText text={msg.text} />
+                            )}
+                          </div>
                         </div>
                         {msg.timestamp && (
                           <p className={`text-xs text-gray-500 mt-1 ${msg.from === 'user' ? 'text-right' : 'text-left'}`}>
@@ -293,7 +345,7 @@ export default function LandingPage() {
               </div>
             </div>
             {/* ChatGPT style input at bottom */}
-            <div className=" p-4">
+            <div className="flex-shrink-0 p-4 bg-[#F9FAFB]">
               <div className="max-w-3xl mx-auto flex items-end gap-2">
                 <div className="flex-1 relative">
                   <textarea
