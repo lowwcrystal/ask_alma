@@ -5,6 +5,19 @@ import { ArrowUp, LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 
+// Get API URL based on environment
+const getApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  // In production (Vercel), use relative URL
+  if (window.location.hostname !== 'localhost') {
+    return '';
+  }
+  // In development, use localhost
+  return 'http://localhost:5001';
+};
+
 // Animated thinking indicator component
 function ThinkingAnimation() {
   const [currentFrame, setCurrentFrame] = useState(0);
@@ -213,7 +226,7 @@ export default function AskAlma() {
       if (!user?.id) return; // Only fetch if user is logged in
       
       try {
-        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+        const apiUrl = getApiUrl();
         const response = await fetch(`${apiUrl}/api/conversations?user_id=${user.id}`);
         if (response.ok) {
           const data = await response.json();
@@ -258,7 +271,7 @@ export default function AskAlma() {
 
     try {
       // Use the backend API URL - backend runs on port 5001
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
