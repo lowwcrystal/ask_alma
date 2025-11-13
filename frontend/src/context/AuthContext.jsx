@@ -10,6 +10,26 @@ export const AuthProvider = ({ children }) => {
 
   // Check for existing auth on mount
   useEffect(() => {
+    // Clean up hash fragments on mount (in case of OAuth redirect)
+    const cleanupHash = () => {
+      if (window.location.hash) {
+        // Wait a bit to ensure Supabase has processed the hash
+        setTimeout(() => {
+          const path = window.location.pathname || '/chat';
+          window.history.replaceState(null, '', path);
+        }, 100);
+      }
+    };
+
+    // Immediate cleanup if hash exists (handles empty hash like just "#")
+    if (window.location.hash) {
+      // Give Supabase time to process, then clean up
+      setTimeout(() => {
+        const path = window.location.pathname || '/chat';
+        window.history.replaceState(null, '', path);
+      }, 200);
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
@@ -20,6 +40,7 @@ export const AuthProvider = ({ children }) => {
           name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User'
         });
       }
+      cleanupHash();
       setLoading(false);
     });
 
@@ -34,15 +55,15 @@ export const AuthProvider = ({ children }) => {
         });
         
         // Clean up OAuth hash fragments from URL
-        if (window.location.hash) {
-          // Remove hash fragments after Supabase processes them
-          window.history.replaceState(null, '', window.location.pathname);
-        }
-        
-        // Redirect to /chat after successful OAuth sign-in if not already there
-        if (window.location.pathname !== '/chat') {
-          window.location.href = '/chat';
-        }
+        setTimeout(() => {
+          const path = window.location.pathname || '/chat';
+          window.history.replaceState(null, '', path);
+          
+          // Redirect to /chat after successful OAuth sign-in if not already there
+          if (window.location.pathname !== '/chat') {
+            window.location.href = '/chat';
+          }
+        }, 100);
       } else if (session) {
         setIsAuthenticated(true);
         setUser({
@@ -50,6 +71,7 @@ export const AuthProvider = ({ children }) => {
           email: session.user.email,
           name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User'
         });
+        cleanupHash();
       } else {
         setIsAuthenticated(false);
         setUser(null);
