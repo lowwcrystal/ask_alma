@@ -7,6 +7,15 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sys
 import os
+from dotenv import load_dotenv
+
+# Load .env from src/embedder/.env before importing rag_query
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(project_root, 'src', 'embedder', '.env')
+if os.path.exists(env_path):
+    load_dotenv(env_path, override=True)
+else:
+    load_dotenv(override=True)
 
 # Add parent directory to path to import rag_query
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -238,16 +247,58 @@ def delete_conversation(conversation_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/conversations/<conversation_id>', methods=['PATCH'])
+def update_conversation(conversation_id):
+    """Update a conversation (e.g., rename)"""
+    try:
+        data = request.json
+        title = data.get('title')
+        
+        if not title or not title.strip():
+            return jsonify({'error': 'Title is required'}), 400
+        
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            UPDATE conversations 
+            SET title = %s
+            WHERE id = %s
+            RETURNING id, title;
+        """, (title.strip(), conversation_id))
+        
+        updated = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        if updated:
+            return jsonify({
+                'success': True,
+                'conversation': {
+                    'id': updated['id'],
+                    'title': updated['title']
+                }
+            })
+        else:
+            return jsonify({'error': 'Conversation not found'}), 404
+    
+    except Exception as e:
+        print(f"Error updating conversation: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("\n" + "="*60)
     print("🎓 AskAlma API Server Starting...")
     print("="*60)
     print("📍 API will be available at: http://localhost:5001")
     print("📡 Endpoints:")
-    print("   GET  /api/health")
-    print("   POST /api/chat")
-    print("   GET  /api/conversations")
-    print("   GET  /api/conversations/<id>")
+    print("   GET    /api/health")
+    print("   POST   /api/chat")
+    print("   GET    /api/conversations")
+    print("   GET    /api/conversations/<id>")
+    print("   PATCH  /api/conversations/<id>")
     print("   DELETE /api/conversations/<id>")
     print("="*60 + "\n")
     
