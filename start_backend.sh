@@ -22,5 +22,5 @@ python3 -m pip install --user -q -r requirements.txt
 # Start the Flask server
 echo "🎓 Starting Flask API server on http://localhost:5001"
 echo ""
-python3 backend/api.py
+python3 api/app.py
 

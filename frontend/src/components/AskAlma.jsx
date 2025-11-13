@@ -1,7 +1,7 @@
 // src/components/AskAlma.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUp, LogOut, Loader2 } from "lucide-react";
+import { ArrowUp, LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 
@@ -118,9 +118,6 @@ function TypingText({ text, speed = 20, onComplete }) {
 
 // Chat Message component
 function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
-  const [showSources, setShowSources] = useState(false);
-  const [typingComplete, setTypingComplete] = useState(!isTyping);
-  
   const formatTime = (ts) => {
     if (!ts) return '';
     const date = new Date(ts);
@@ -145,7 +142,7 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
       )}
       <div>
         <div
-          className={`p-4 rounded-2xl ${
+          className={`px-4 py-2 rounded-3xl ${
             from === "alma"
               ? "bg-white border shadow-sm"
               : "bg-[#B9D9EB] text-gray-900"
@@ -156,37 +153,12 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
               <TypingText 
                 text={text} 
                 speed={8} 
-                onComplete={() => setTypingComplete(true)}
+                onComplete={() => {}}
               />
             ) : (
               <MarkdownText text={text} />
             )}
           </div>
-          
-          {/* Show sources for AI responses - only after typing is complete */}
-          {from === "alma" && sources && sources.length > 0 && typingComplete && (
-            <div className="mt-3 pt-3 border-t border-gray-200">
-              <button
-                onClick={() => setShowSources(!showSources)}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-              >
-                {showSources ? "Hide" : "Show"} sources ({sources.length})
-              </button>
-              
-              {showSources && (
-                <div className="mt-2 space-y-2">
-                  {sources.map((source, idx) => (
-                    <div key={idx} className="text-xs bg-gray-50 p-2 rounded border">
-                      <div className="font-semibold text-gray-700">
-                        Source {idx + 1} (similarity: {(source.similarity * 100).toFixed(1)}%)
-                      </div>
-                      <div className="text-gray-600 mt-1">{source.content}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
         {timestamp && (
           <p className={`text-xs text-gray-500 mt-1 ${from === "alma" ? "text-left" : "text-right"}`}>
@@ -225,6 +197,10 @@ export default function AskAlma() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [searchParams] = useSearchParams();
+  const [contextMenu, setContextMenu] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [editingConvId, setEditingConvId] = useState(null);
+  const [editingValue, setEditingValue] = useState("");
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -259,6 +235,15 @@ export default function AskAlma() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [contextMenu]);
 
   const handleSendQuery = async (queryText) => {
     if (!queryText.trim() || isLoading) return;
@@ -387,7 +372,7 @@ export default function AskAlma() {
   const startNewChat = () => {
     setMessages([]);
     setConversationId(null);
-    setShowSuggestions(true);
+    setShowSuggestions(false);
     setError(null);
     setLatestMessageIndex(-1);
   };
@@ -395,6 +380,72 @@ export default function AskAlma() {
   const handleLogout = () => {
     logout();
     navigate("/");
+  };
+
+  const handleDeleteConversation = async (convId) => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const response = await fetch(`${apiUrl}/api/conversations/${convId}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        // Refresh conversations list
+        await fetchConversations();
+        // If we deleted the current conversation, start a new chat
+        if (convId === conversationId) {
+          startNewChat();
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting conversation:', err);
+    }
+  };
+
+  const handleRenameConversation = async (convId, newTitle) => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const response = await fetch(`${apiUrl}/api/conversations/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle })
+      });
+      
+      if (response.ok) {
+        // Refresh conversations list
+        await fetchConversations();
+      }
+    } catch (err) {
+      console.error('Error renaming conversation:', err);
+    }
+  };
+
+  const handleContextMenu = (e, conv) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      conversation: conv
+    });
+  };
+
+  const startRenaming = (conv) => {
+    setEditingConvId(conv.id);
+    setEditingValue(conv.title);
+    setContextMenu(null);
+  };
+
+  const saveRename = async (convId) => {
+    if (editingValue.trim() && editingValue !== conversations.find(c => c.id === convId)?.title) {
+      await handleRenameConversation(convId, editingValue.trim());
+    }
+    setEditingConvId(null);
+    setEditingValue("");
+  };
+
+  const cancelRename = () => {
+    setEditingConvId(null);
+    setEditingValue("");
   };
 
   return (
@@ -416,24 +467,47 @@ export default function AskAlma() {
           ) : (
             <div className="space-y-1">
               {conversations.map((conv) => (
-                <button
-                  key={conv.id}
-                  onClick={() => loadConversation(conv.id)}
-                  className={`w-full text-left p-2 rounded text-sm hover:bg-gray-200 transition ${
-                    conversationId === conv.id ? 'bg-gray-200' : 'bg-white'
-                  }`}
-                >
-                  <div className="truncate font-medium">{conv.title}</div>
-                  <div className="text-xs text-gray-500">
-                    {conv.message_count} messages
+                editingConvId === conv.id ? (
+                  <div
+                    key={conv.id}
+                    className={`w-full p-2 rounded text-sm ${
+                      conversationId === conv.id ? 'bg-gray-200' : ''
+                    }`}
+                  >
+                    <input
+                      type="text"
+                      value={editingValue}
+                      onChange={(e) => setEditingValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          saveRename(conv.id);
+                        } else if (e.key === 'Escape') {
+                          cancelRename();
+                        }
+                      }}
+                      onBlur={() => saveRename(conv.id)}
+                      className="w-full px-2 py-1 text-sm font-normal text-[#003865] border rounded focus:outline-none focus:ring-2 focus:ring-[#003865]"
+                      autoFocus
+                    />
                   </div>
-                </button>
+                ) : (
+                  <button
+                    key={conv.id}
+                    onClick={() => loadConversation(conv.id)}
+                    onContextMenu={(e) => handleContextMenu(e, conv)}
+                    className={`w-full text-left p-2 rounded text-sm hover:bg-[#B9D9EB] transition ${
+                      conversationId === conv.id ? 'bg-gray-200' : ''
+                    }`}
+                  >
+                    <div className="truncate font-normal">{conv.title}</div>
+                  </button>
+                )
               ))}
             </div>
           )}
         </div>
         
-        <div className="text-sm text-gray-600 border-t pt-3">
+        <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-gray-400" />
             <div>
@@ -455,7 +529,7 @@ export default function AskAlma() {
               style={{ width: '96px', height: '96px', objectFit: 'contain' }}
             />
             <div>
-              <h1 className="text-3xl font-bold text-almaBlue tracking-tight">AskAlma</h1>
+              <h1 className="text-3xl font-bold text-[#003865] tracking-tight">AskAlma</h1>
               <p className="text-base text-gray-600">
                 Your AI Academic Advisor for Columbia University
               </p>
@@ -486,9 +560,21 @@ export default function AskAlma() {
             
             {/* Loading indicator */}
             {isLoading && (
-              <div className="flex items-center gap-2 text-gray-500 self-start">
-                <ThinkingAnimation />
-                <span className="text-sm">Thinking...</span>
+              <div className="max-w-2xl w-fit flex items-start gap-3 self-start">
+                <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+                  <img
+                    src="/Icon.png"
+                    alt="AskAlma"
+                    className="logo-no-bg"
+                    style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
+                  />
+                </div>
+                <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
+                  <div className="flex items-center gap-2">
+                    <ThinkingAnimation />
+                    <span className="text-sm text-gray-600">Thinking...</span>
+                  </div>
+                </div>
               </div>
             )}
             
@@ -505,7 +591,7 @@ export default function AskAlma() {
         </div>
 
         {/* Suggested questions - positioned above input bar */}
-        {showSuggestions && messages.length === 0 && (
+        {showSuggestions && messages.length <= 1 && (
           <div className="px-6 py-3">
             <p className="text-gray-500 mb-2 font-medium">Suggested questions:</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -521,12 +607,12 @@ export default function AskAlma() {
         )}
 
         {/* Input bar - ChatGPT style */}
-        <div className="bg-white p-4">
+        <div className=" p-4">
           <div className="max-w-3xl mx-auto flex items-end gap-2">
             <div className="flex-1 relative">
               <textarea
                 placeholder="Message AskAlma..."
-                className="w-full px-4 py-3 pr-12 border-0 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
+                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value);
@@ -544,7 +630,7 @@ export default function AskAlma() {
               <button
                 onClick={handleSend}
                 disabled={isLoading || !input.trim()}
-                className={`absolute right-2 bottom-2 p-2 rounded-lg transition ${
+                className={`absolute right-2 top-[45%] -translate-y-1/2 p-2 rounded-full transition flex items-center justify-center ${
                   isLoading || !input.trim()
                     ? "bg-gray-300 cursor-not-allowed"
                     : "bg-[#003865] text-white hover:bg-[#002d4f]"
@@ -556,6 +642,62 @@ export default function AskAlma() {
           </div>
         </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed bg-white border shadow-lg rounded-lg py-1 z-50"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+            onClick={() => {
+              startRenaming(contextMenu.conversation);
+            }}
+          >
+            Rename
+          </button>
+          <button
+            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
+            onClick={() => {
+              setDeleteConfirm(contextMenu.conversation);
+              setContextMenu(null);
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2">Delete Chat</h3>
+            <p className="text-gray-600 text-sm mb-4">
+              This can't be undone. Confirm below to continue
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+                onClick={() => setDeleteConfirm(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
+                onClick={() => {
+                  handleDeleteConversation(deleteConfirm.id);
+                  setDeleteConfirm(null);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

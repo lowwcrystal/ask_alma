@@ -99,13 +99,6 @@ export default function LoginPage() {
             {loading ? 'Logging in...' : 'Log in'}
           </button>
 
-          <p className="mt-6 text-center text-sm text-gray-600">
-            Don't have an account?{' '}
-            <Link to="/signup" className="text-[#003865] hover:underline">
-              Sign up
-            </Link>
-          </p>
-
           <button
             type="button"
             onClick={handleGoogleSignIn}
@@ -131,6 +124,13 @@ export default function LoginPage() {
             </svg>
             Sign in with Google
           </button>
+
+          <p className="mt-6 text-center text-sm text-gray-600">
+            Don't have an account?{' '}
+            <Link to="/signup" className="text-[#003865] hover:underline">
+              Sign up
+            </Link>
+          </p>
         </form>
       </div>
     </div>
