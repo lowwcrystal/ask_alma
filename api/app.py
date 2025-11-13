@@ -23,7 +23,14 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from src.embedder.rag_query import rag_answer, get_conversation_history, get_pg_conn
 
 app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
-CORS(app)  # Enable CORS for React frontend
+# Enable CORS for React frontend with explicit origins
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000", "*"],
+        "methods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 @app.route('/api/health', methods=['GET'])
 def health_check():

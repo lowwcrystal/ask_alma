@@ -365,7 +365,7 @@ export default function AskAlma() {
     if (!user?.id) return;
     
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/conversations?user_id=${user.id}`);
       if (response.ok) {
         const data = await response.json();
@@ -378,11 +378,13 @@ export default function AskAlma() {
 
   const loadConversation = async (convId) => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/conversations/${convId}`);
       
       if (!response.ok) {
-        throw new Error(`Failed to load conversation: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('API Error:', response.status, errorText);
+        throw new Error(`Failed to load conversation: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
@@ -404,7 +406,12 @@ export default function AskAlma() {
       setMobileMenuOpen(false); // Close mobile menu after loading conversation
     } catch (err) {
       console.error('Error loading conversation:', err);
-      setError('Failed to load conversation. Please try again.');
+      // Check if it's a network/CORS error
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        setError('Cannot connect to server. Make sure the backend is running on port 5001.');
+      } else {
+        setError(`Failed to load conversation: ${err.message}`);
+      }
     }
   };
 
