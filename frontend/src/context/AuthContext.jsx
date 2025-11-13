@@ -23,9 +23,27 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
+    // Listen for auth changes (including OAuth callbacks)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setIsAuthenticated(true);
+        setUser({
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User'
+        });
+        
+        // Clean up OAuth hash fragments from URL
+        if (window.location.hash) {
+          // Remove hash fragments after Supabase processes them
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+        
+        // Redirect to /chat after successful OAuth sign-in if not already there
+        if (window.location.pathname !== '/chat') {
+          window.location.href = '/chat';
+        }
+      } else if (session) {
         setIsAuthenticated(true);
         setUser({
           id: session.user.id,
@@ -97,6 +115,10 @@ export const AuthProvider = ({ children }) => {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/chat`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
       },
     });
     if (error) throw error;
