@@ -18,14 +18,22 @@ const getApiUrl = () => {
   return 'http://localhost:5001';
 };
 
-// Animated thinking indicator component
-function ThinkingAnimation() {
+
+const ThinkingAnimation = React.memo(function ThinkingAnimation() {
   const [currentFrame, setCurrentFrame] = useState(0);
   const frames = [
     '/thinking_frame_1.png',
     '/thinking_frame_2.png',
     '/thinking_frame_3.png'
   ];
+
+  // Preload all frames for smooth animation
+  useEffect(() => {
+    frames.forEach(frame => {
+      const img = new Image();
+      img.src = frame;
+    });
+  }, []); 
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -40,9 +48,11 @@ function ThinkingAnimation() {
       src={frames[currentFrame]} 
       alt="Thinking" 
       className="w-12 h-12 object-contain"
+      loading="eager"
+      decoding="async"
     />
   );
-}
+});
 
 // Utility function to parse markdown bold syntax (**text**)
 function parseMarkdownBold(text) {
@@ -150,6 +160,8 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
             alt="AskAlma"
             className="logo-no-bg"
             style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
+            loading="lazy"
+            decoding="async"
           />
         </div>
       )}
@@ -606,6 +618,9 @@ export default function AskAlma() {
               src="/AskAlma_Logo.jpg?v=1"
               alt="AskAlma Logo"
               className="md:w-24 md:h-24 w-12 h-12 logo-no-bg object-contain"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
             />
             <div>
               <h1 className="text-xl md:text-3xl font-bold text-[#003865] tracking-tight">AskAlma</h1>

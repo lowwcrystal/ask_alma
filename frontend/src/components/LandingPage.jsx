@@ -61,14 +61,22 @@ function MarkdownText({ text }) {
   );
 }
 
-// Animated thinking indicator component
-function ThinkingAnimation() {
+// Animated thinking indicator component (memoized for performance)
+const ThinkingAnimation = React.memo(function ThinkingAnimation() {
   const [currentFrame, setCurrentFrame] = useState(0);
   const frames = [
     '/thinking_frame_1.png',
     '/thinking_frame_2.png',
     '/thinking_frame_3.png'
   ];
+
+  // Preload all frames for smooth animation
+  useEffect(() => {
+    frames.forEach(frame => {
+      const img = new Image();
+      img.src = frame;
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -83,9 +91,11 @@ function ThinkingAnimation() {
       src={frames[currentFrame]} 
       alt="Thinking" 
       className="w-12 h-12 object-contain"
+      loading="eager"
+      decoding="async"
     />
   );
-}
+});
 
 const greetings = [
   "What's on your mind today?",
@@ -219,6 +229,9 @@ export default function LandingPage() {
             src="/AskAlma_Logo.jpg"
             alt="AskAlma Logo"
             className="w-10 h-10 object-contain logo-no-bg"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
           />
           <h1 className="text-2xl font-bold text-[#003865]">AskAlma</h1>
         </div>
