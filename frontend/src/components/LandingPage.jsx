@@ -2,6 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ArrowUp } from 'lucide-react';
 
+// Get API URL based on environment
+const getApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  // In production (Vercel), use relative URL
+  if (window.location.hostname !== 'localhost') {
+    return '';
+  }
+  // In development, use localhost
+  return 'http://localhost:5001';
+};
+
 // Animated thinking indicator component
 function ThinkingAnimation() {
   const [currentFrame, setCurrentFrame] = useState(0);
@@ -114,7 +127,7 @@ export default function LandingPage() {
 
     try {
       // Use the backend API URL - backend runs on port 5001
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
