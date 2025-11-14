@@ -1,9 +1,11 @@
 // src/components/AskAlma.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUp, LogOut, Menu, X, MoreVertical } from "lucide-react";
+import { ArrowUp, LogOut, Menu, X, MoreVertical, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
+import { ACADEMIC_YEAR_OPTIONS, SCHOOL_OPTIONS } from "../constants/profile";
+import ProfileModal from "./ProfileModal";
 
 // Get API URL based on environment
 const getApiUrl = () => {
@@ -18,12 +20,25 @@ const getApiUrl = () => {
   return 'http://localhost:5001';
 };
 
+const getAcademicYearLabel = (value) => {
+  if (!value) return null;
+  const option = ACADEMIC_YEAR_OPTIONS.find((item) => item.value === value);
+  return option ? option.label : value;
+};
+
+const SCHOOL_LABEL_MAP = Object.fromEntries(SCHOOL_OPTIONS.map((item) => [item.value, item.label]));
+
+const getSchoolLabel = (value) => {
+  if (!value) return null;
+  return SCHOOL_LABEL_MAP[value] || value;
+};
+
 // Thinking animation frames (constant, defined outside component)
 const THINKING_FRAMES = [
-  '/thinking_frame_1.png',
-  '/thinking_frame_2.png',
-  '/thinking_frame_3.png'
-];
+    '/thinking_frame_1.png',
+    '/thinking_frame_2.png',
+    '/thinking_frame_3.png'
+  ];
 
 // Animated thinking indicator component (memoized for performance)
 const ThinkingAnimation = React.memo(function ThinkingAnimation() {
@@ -220,6 +235,12 @@ export default function AskAlma() {
   const [error, setError] = useState(null);
   const [latestMessageIndex, setLatestMessageIndex] = useState(-1);
   const [conversations, setConversations] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState(null);
+  const [profileSaveError, setProfileSaveError] = useState(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [isProfileModalOpen, setProfileModalOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
   const { logout, user } = useAuth();
@@ -230,6 +251,23 @@ export default function AskAlma() {
   const [editingValue, setEditingValue] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+
+  const schoolLabel = profile?.school ? getSchoolLabel(profile.school) : null;
+  const academicYearLabel = profile?.academic_year ? getAcademicYearLabel(profile.academic_year) : null;
+  const profileSubtitle = (() => {
+    if (profileLoading) return 'Loading profile...';
+    if (!profile) return 'Add your academic profile';
+    const segments = [];
+    if (profile.major) {
+      segments.push(profile.major);
+    }
+    const infoParts = [schoolLabel, academicYearLabel].filter(Boolean);
+    if (infoParts.length) {
+      segments.push(infoParts.join(' • '));
+    }
+    return segments.join(' — ') || 'Update your academic profile';
+  })();
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -255,6 +293,55 @@ export default function AskAlma() {
 
     fetchConversations();
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setProfile(null);
+      return;
+    }
+
+    let isCancelled = false;
+    const fetchProfile = async () => {
+      setProfileLoading(true);
+      setProfileError(null);
+      try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/profile/${user.id}`);
+        if (isCancelled) return;
+
+        if (response.status === 404) {
+          setProfile(null);
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error('Failed to load profile');
+        }
+
+        const data = await response.json();
+        setProfile(data);
+      } catch (err) {
+        if (!isCancelled) {
+          setProfileError(err.message || 'Unable to load profile');
+        }
+      } finally {
+        if (!isCancelled) {
+          setProfileLoading(false);
+        }
+      }
+    };
+
+    fetchProfile();
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!isProfileModalOpen) {
+      setProfileSaveError(null);
+    }
+  }, [isProfileModalOpen]);
 
   // Handle search query from landing page
   useEffect(() => {
@@ -418,7 +505,7 @@ export default function AskAlma() {
   const startNewChat = () => {
     setMessages([]);
     setConversationId(null);
-    setShowSuggestions(false);
+    setShowSuggestions(true);
     setError(null);
     setLatestMessageIndex(-1);
     setMobileMenuOpen(false); // Close mobile menu after starting new chat
@@ -467,6 +554,38 @@ export default function AskAlma() {
     }
   };
 
+  const handleSaveProfile = async (updates) => {
+    if (!user?.id) return;
+
+    setProfileSaving(true);
+    setProfileSaveError(null);
+    try {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          ...updates,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Failed to save profile');
+      }
+
+      const data = await response.json();
+      setProfile(data);
+      setProfileModalOpen(false);
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      setProfileSaveError(err.message || 'Failed to save profile');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   const handleContextMenu = (e, conv) => {
     e.preventDefault();
     setContextMenu({
@@ -495,6 +614,15 @@ export default function AskAlma() {
     setEditingValue("");
   };
 
+  const toggleSidebarVisibility = () => {
+    if (sidebarVisible) {
+      setSidebarVisible(false);
+      setMobileMenuOpen(false);
+    } else {
+      setSidebarVisible(true);
+    }
+  };
+
   return (
     <div className="flex w-screen h-screen bg-almaGray">
       {/* Mobile overlay backdrop */}
@@ -506,123 +634,154 @@ export default function AskAlma() {
       )}
 
       {/* Sidebar */}
-      <div className={`
-        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0
-        fixed md:relative
-        w-64 bg-gray-100 border-r p-4 flex flex-col
-        z-50 h-full
-        transition-transform duration-300 ease-in-out
-      `}>
+      {(sidebarVisible || mobileMenuOpen) && (
+        <div className={`
+          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+          ${sidebarVisible ? 'md:translate-x-0 md:flex' : 'md:-translate-x-full md:hidden'}
+          fixed md:relative
+          w-64 bg-gray-100 border-r p-4 flex flex-col
+          z-50 h-full
+          transition-transform duration-300 ease-in-out
+        `}>
         <button 
           onClick={startNewChat}
-          className="bg-almaLightBlue text-gray-900 font-medium rounded-lg py-2 mb-4 hover:brightness-95 transition"
+            className="bg-[#B9D9EB] text-gray-900 font-medium rounded-2xl py-2 mb-4 hover:bg-[#A8CEE1] transition"
         >
           + New Chat
         </button>
         
-        {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto mb-4">
-          <h3 className="text-xs font-semibold text-gray-600 mb-2 px-2">Your Chats</h3>
-          {conversations.length === 0 ? (
-            <p className="text-xs text-gray-500 px-2">No conversations yet</p>
-          ) : (
-            <div className="space-y-1">
-              {conversations.map((conv) => (
-                editingConvId === conv.id ? (
-                  <div
-                    key={conv.id}
-                    className={`w-full p-2 rounded text-sm ${
-                      conversationId === conv.id ? 'bg-gray-200' : ''
-                    }`}
-                  >
-                    <input
-                      type="text"
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          saveRename(conv.id);
-                        } else if (e.key === 'Escape') {
-                          cancelRename();
-                        }
-                      }}
-                      onBlur={() => saveRename(conv.id)}
-                      className="w-full px-2 py-1 text-sm font-normal text-[#003865] border rounded focus:outline-none focus:ring-2 focus:ring-[#003865]"
-                      autoFocus
-                    />
-                  </div>
-                ) : (
-                  <div
-                    key={conv.id}
-                    className={`w-full flex items-center gap-2 p-2 rounded text-sm hover:bg-[#B9D9EB] transition ${
-                      conversationId === conv.id ? 'bg-gray-200' : ''
-                    }`}
-                  >
-                    <button
-                      onClick={() => loadConversation(conv.id)}
-                      onContextMenu={(e) => handleContextMenu(e, conv)}
-                      className="flex-1 text-left truncate font-normal"
+          {/* Conversations List */}
+          <div className="flex-1 overflow-y-auto mb-4">
+            <h3 className="text-xs font-semibold text-gray-600 mb-2 px-2">Your Chats</h3>
+            {conversations.length === 0 ? (
+              <p className="text-xs text-gray-500 px-2">No conversations yet</p>
+            ) : (
+              <div className="space-y-1">
+                {conversations.map((conv) => (
+                  editingConvId === conv.id ? (
+                    <div
+                      key={conv.id}
+                      className={`w-full p-2 rounded text-sm ${
+                        conversationId === conv.id ? 'bg-gray-200' : ''
+                      }`}
                     >
-                      {conv.title}
-                    </button>
-                    {/* Mobile three-dot menu */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMobileConvMenu(mobileConvMenu === conv.id ? null : conv.id);
-                      }}
-                      className="md:hidden p-1 hover:bg-gray-200 rounded"
+                      <input
+                        type="text"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            saveRename(conv.id);
+                          } else if (e.key === 'Escape') {
+                            cancelRename();
+                          }
+                        }}
+                        onBlur={() => saveRename(conv.id)}
+                        className="w-full px-2 py-1 text-sm font-normal text-[#003865] border rounded focus:outline-none focus:ring-2 focus:ring-[#003865]"
+                        autoFocus
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      key={conv.id}
+                      className={`w-full flex items-center gap-2 p-2 rounded text-sm hover:bg-[#B9D9EB] transition ${
+                        conversationId === conv.id ? 'bg-gray-200' : ''
+                      }`}
                     >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                    {/* Mobile dropdown menu */}
-                    {mobileConvMenu === conv.id && (
-                      <div className="absolute right-8 bg-white border shadow-lg rounded-lg py-1 z-50">
-                        <button
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-                          onClick={() => {
-                            startRenaming(conv);
-                            setMobileConvMenu(null);
-                          }}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
-                          onClick={() => {
-                            setMobileConvMenu(null);
-                            if (window.confirm("This can't be undone. Confirm below to continue")) {
-                              handleDeleteConversation(conv.id);
-                            }
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              ))}
+                      <button
+                        onClick={() => loadConversation(conv.id)}
+                        onContextMenu={(e) => handleContextMenu(e, conv)}
+                        className="flex-1 text-left truncate font-normal"
+                      >
+                        {conv.title}
+                      </button>
+                      {/* Mobile three-dot menu */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMobileConvMenu(mobileConvMenu === conv.id ? null : conv.id);
+                        }}
+                        className="md:hidden p-1 hover:bg-gray-200 rounded"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                      {/* Mobile dropdown menu */}
+                      {mobileConvMenu === conv.id && (
+                        <div className="absolute right-8 bg-white border shadow-lg rounded-lg py-1 z-50">
+                          <button
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                            onClick={() => {
+                              startRenaming(conv);
+                              setMobileConvMenu(null);
+                            }}
+                          >
+                            Rename
+                          </button>
+                          <button
+                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
+                            onClick={() => {
+                              setMobileConvMenu(null);
+                              if (window.confirm("This can't be undone. Confirm below to continue")) {
+                                handleDeleteConversation(conv.id);
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+          </div>
+        )}
+                    </div>
+                  )
+                ))}
             </div>
           )}
-        </div>
-        
-        <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-gray-400" />
-            <div>
-              <p className="font-semibold truncate">{user?.email || 'Columbia Student'}</p>
-              <p className="text-xs text-gray-500">View Profile</p>
-            </div>
+          </div>
+          
+          <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3">
+            <button
+              type="button"
+              onClick={() => setProfileModalOpen(true)}
+              className="w-full flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-gray-100 transition text-left"
+            >
+              {profile?.profile_image ? (
+                <img
+                  src={profile.profile_image}
+                  alt="Profile"
+                  className="w-8 h-8 rounded-full object-cover border border-[#003865]/40"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#003865] flex items-center justify-center text-white font-semibold">
+                  {(user?.email?.[0] || 'A').toUpperCase()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold truncate">{user?.email || 'Columbia Student'}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {profileSubtitle}
+                </p>
+                {!profileLoading && profileError && (
+                  <p className="text-xs text-red-500 mt-1 truncate">
+                    Unable to load profile details
+                  </p>
+                )}
+              </div>
+              {profileLoading && <Loader2 className="w-4 h-4 text-[#003865] animate-spin" />}
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen">
         <header className="flex-shrink-0 border-b p-4 md:p-8 flex items-center justify-between bg-white shadow-sm">
           <div className="flex items-center gap-2 md:gap-4">
+            <button
+              onClick={toggleSidebarVisibility}
+              className="hidden md:flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 transition"
+              title={sidebarVisible ? "Hide chat panel" : "Show chat panel"}
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <img
               src="/AskAlma_Logo.jpg?v=1"
               alt="AskAlma Logo"
@@ -684,7 +843,7 @@ export default function AskAlma() {
                 </div>
                 <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
                   <div className="flex items-center gap-2">
-                    <ThinkingAnimation />
+                <ThinkingAnimation />
                     <span className="text-sm text-gray-600">Thinking...</span>
                   </div>
                 </div>
@@ -708,7 +867,7 @@ export default function AskAlma() {
           <div className="flex-shrink-0 px-6 py-3 bg-almaGray">
             <div className="max-w-5xl mx-auto">
               <p className="text-gray-500 mb-2 font-medium hidden md:block">Suggested questions:</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {suggested.map((q, i) => (
                 <SuggestedQuestion
                   key={i}
@@ -757,6 +916,15 @@ export default function AskAlma() {
           </div>
         </div>
       </div>
+
+      <ProfileModal
+        isOpen={Boolean(user?.id) && isProfileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+        profile={profile}
+        onSave={handleSaveProfile}
+        saving={profileSaving}
+        error={profileSaveError}
+      />
 
       {/* Context Menu */}
       {contextMenu && (

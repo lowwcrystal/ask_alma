@@ -52,6 +52,18 @@ MAX_CONTEXT_CHARS = 8000           # safety to avoid overlong prompts
 MAX_HISTORY_MESSAGES = 10          # how many previous messages to include in context
 LLM_TEMPERATURE = 0.2              # 0 = deterministic, 1 = creative
 
+SCHOOL_LABELS = {
+    "columbia_college": "Columbia College",
+    "columbia_engineering": "Columbia Engineering",
+    "barnard": "Barnard College",
+}
+
+SCHOOL_SOURCE_PATTERNS = {
+    "columbia_college": "%columbia_college%",
+    "columbia_engineering": "%columbia_engineering%",
+    "barnard": "%barnard%",
+}
+
 # -------------------------------
 # Helpers
 # -------------------------------
@@ -82,6 +94,28 @@ def create_conversation(conn, user_id=None) -> str:
     return str(conversation_id)
 
 
+def get_school_source_filter(school: Optional[str]) -> Optional[str]:
+    """Return a source filter pattern for the student's school, if available."""
+    if not school:
+        return None
+    return SCHOOL_SOURCE_PATTERNS.get(school)
+
+
+def get_user_profile(conn, user_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Fetch profile information for a Supabase user, if available."""
+    if not user_id:
+        return None
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT school, academic_year, major, minors, classes_taken, profile_image
+        FROM user_profiles
+        WHERE user_id = %s;
+    """, (user_id,))
+    profile = cur.fetchone()
+    cur.close()
+    return profile
+
+
 def get_conversation_history(conn, conversation_id: str, limit: int = MAX_HISTORY_MESSAGES) -> List[Dict[str, Any]]:
     """Retrieve the last N messages from a conversation."""
     cur = conn.cursor()
@@ -109,7 +143,42 @@ def save_message(conn, conversation_id: str, role: str, content: str, metadata: 
     cur.close()
 
 
-def build_prompt(question: str, contexts: list[str], chat_history: List[Dict[str, Any]] = None) -> str:
+def format_profile_summary(profile: Dict[str, Any]) -> Optional[str]:
+    """Format profile details into natural language instructions."""
+    if not profile:
+        return None
+
+    lines = []
+    school_value = profile.get("school")
+    school_label = SCHOOL_LABELS.get(school_value, school_value) if school_value else None
+    if school_label:
+        lines.append(f"- School: {school_label}")
+    if profile.get("academic_year"):
+        lines.append(f"- Academic year: {profile['academic_year']}")
+    if profile.get("major"):
+        lines.append(f"- Major: {profile['major']}")
+    minors = profile.get("minors") or []
+    if minors:
+        lines.append(f"- Minors: {', '.join(minors)}")
+    classes_taken = profile.get("classes_taken") or []
+    if classes_taken:
+        lines.append(f"- Classes already completed: {', '.join(classes_taken)}")
+
+    if not lines:
+        return None
+
+    if school_label:
+        lines.append(f"- Prioritize information from {school_label} sources when relevant.")
+    lines.append("- Do not recommend courses that are already completed.")
+    return "\n".join(lines)
+
+
+def build_prompt(
+    question: str,
+    contexts: list[str],
+    chat_history: List[Dict[str, Any]] = None,
+    profile_summary: Optional[str] = None,
+) -> str:
     """Constructs a RAG prompt with optional chat history for llama3.1."""
     context_text = "\n\n---\n\n".join(contexts)
     # Truncate context if it's too long
@@ -124,6 +193,10 @@ def build_prompt(question: str, contexts: list[str], chat_history: List[Dict[str
             content = msg["content"]
             history_lines.append(f"{role}: {content}")
         history_text = "\n\nCHAT HISTORY:\n" + "\n\n".join(history_lines) + "\n"
+
+    profile_text = ""
+    if profile_summary:
+        profile_text = f"\n\nSTUDENT PROFILE:\n{profile_summary}\n"
     
     return textwrap.dedent(f"""
     You are AskAlma, an expert academic advisor for students at Columbia College, Columbia Engineering, Columbia GS, and Barnard College.
@@ -138,7 +211,7 @@ def build_prompt(question: str, contexts: list[str], chat_history: List[Dict[str
     - Registration policies and procedures
     - Academic deadlines and timelines
     
-    Be conversational, friendly, and supportive while maintaining accuracy. Always base your answers on the CONTEXT provided below.
+    Be conversational, friendly, and supportive while maintaining accuracy. Always base your answers on the CONTEXT provided below.{profile_text}
     
     ## WHEN TO USE CHAT HISTORY:
     **IMPORTANT**: Only reference chat history when the current question is DIRECTLY RELATED to previous conversation.
@@ -184,6 +257,9 @@ def build_prompt(question: str, contexts: list[str], chat_history: List[Dict[str
     ## RULES FOR COURSE RECOMMENDATIONS AND PLANNING:
     **These rules apply ONLY when making course recommendations or creating semester plans:**
     
+    - Always tailor suggestions to the student's academic year, major, and minors (from the student profile).
+    - Never recommend courses that the student has already completed. Acknowledge completed courses explicitly.
+
     1. **NEVER suggest courses the student has already taken**
        - Review conversation history for courses mentioned as "taken", "completed", or "finished"
        - Explicitly acknowledge completed courses and exclude them from recommendations
@@ -303,6 +379,8 @@ def rag_answer(
     """
     # Connect to database
     conn = get_pg_conn()
+    profile = get_user_profile(conn, user_id)
+    profile_summary = format_profile_summary(profile) if profile else None
     
     # 1) Handle conversation
     chat_history = []
@@ -327,25 +405,45 @@ def rag_answer(
         pass  # if extension/version doesn't support it, ignore
 
     # Query top-k (cosine distance). Similarity = 1 - distance.
-    sql = f"""
-        select
-          id,
-          content,
-          1 - (embedding <=> %s::vector) as similarity
-        from {table_name}
-        order by embedding <=> %s::vector
-        limit %s;
-    """
-    # psycopg2 needs the vector as a string like '[0.1,0.2,...]'
     vec_literal = "[" + ",".join(f"{x:.8f}" for x in q_vec) + "]"
-    cur.execute(sql, (vec_literal, vec_literal, TOP_K))
-    rows = cur.fetchall()
+
+    filtered_rows = []
+    school_filter = get_school_source_filter(profile.get("school") if profile else None)
+    if school_filter:
+        filtered_sql = f"""
+            select
+              id,
+              content,
+              1 - (embedding <=> %s::vector) as similarity
+            from {table_name}
+            where source ILIKE %s
+            order by embedding <=> %s::vector
+            limit %s;
+        """
+        cur.execute(filtered_sql, (vec_literal, school_filter, vec_literal, TOP_K))
+        filtered_rows = cur.fetchall()
+
+    if filtered_rows:
+        rows = filtered_rows
+    else:
+        base_sql = f"""
+            select
+              id,
+              content,
+              1 - (embedding <=> %s::vector) as similarity
+            from {table_name}
+            order by embedding <=> %s::vector
+            limit %s;
+        """
+        cur.execute(base_sql, (vec_literal, vec_literal, TOP_K))
+        rows = cur.fetchall()
+
     cur.close()
 
     contexts = [row["content"] for row in rows]
     
     # 4) Build prompt with chat history
-    prompt = build_prompt(question, contexts, chat_history)
+    prompt = build_prompt(question, contexts, chat_history, profile_summary)
 
     
 
@@ -382,6 +480,10 @@ def rag_answer(
                 for row in rows[:5]  # Save top 5 matches
             ]
         }
+        if profile_summary:
+            metadata["student_profile_summary"] = profile_summary
+        if school_filter and filtered_rows:
+            metadata["school_filter_applied"] = school_filter
         save_message(conn, conversation_id, "assistant", answer, metadata)
     
     conn.close()
