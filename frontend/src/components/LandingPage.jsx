@@ -40,23 +40,67 @@ function parseMarkdownBold(text) {
   return parts;
 }
 
-// Component to render parsed markdown text
-function MarkdownText({ text }) {
-  const parts = parseMarkdownBold(text);
+// Helper to render a single line with bold formatting
+function renderLineWithFormatting(line, key) {
+  const parts = parseMarkdownBold(line);
   
   if (parts.length === 0) {
-    return <>{text}</>;
+    return line;
   }
   
   return (
-    <>
+    <React.Fragment key={key}>
       {parts.map((part, idx) => (
         part.type === 'bold' ? (
-          <strong key={idx}>{part.content}</strong>
+          <strong key={`${key}-${idx}`}>{part.content}</strong>
         ) : (
-          <React.Fragment key={idx}>{part.content}</React.Fragment>
+          <React.Fragment key={`${key}-${idx}`}>{part.content}</React.Fragment>
         )
       ))}
+    </React.Fragment>
+  );
+}
+
+// Component to render parsed markdown text with proper line breaks and lists
+function MarkdownText({ text }) {
+  if (!text) return null;
+  
+  const lines = text.split('\n');
+  
+  return (
+    <>
+      {lines.map((line, idx) => {
+        // Check if it's a bullet point (starts with - or *)
+        if (line.trim().match(/^[-*]\s+/)) {
+          return (
+            <div key={idx} className="flex gap-2 my-1">
+              <span>•</span>
+              <span>{renderLineWithFormatting(line.trim().replace(/^[-*]\s+/, ''), `line-${idx}`)}</span>
+            </div>
+          );
+        }
+        
+        // Check if it's a numbered list (starts with number.)
+        if (line.trim().match(/^\d+\.\s+/)) {
+          const match = line.trim().match(/^(\d+)\.\s+(.*)/);
+          if (match) {
+            return (
+              <div key={idx} className="flex gap-2 my-1">
+                <span>{match[1]}.</span>
+                <span>{renderLineWithFormatting(match[2], `line-${idx}`)}</span>
+              </div>
+            );
+          }
+        }
+        
+        // Regular line - add line break if not the last line
+        return (
+          <React.Fragment key={idx}>
+            {renderLineWithFormatting(line, `line-${idx}`)}
+            {idx < lines.length - 1 && <br />}
+          </React.Fragment>
+        );
+      })}
     </>
   );
 }
@@ -128,6 +172,7 @@ export default function LandingPage() {
   const [typingMessageIndex, setTypingMessageIndex] = useState(null);
   const [displayedText, setDisplayedText] = useState('');
   const messagesEndRef = useRef(null);
+  const [showSuggestedDropdown, setShowSuggestedDropdown] = useState(false);
 
   // Set random greeting on mount
   useEffect(() => {
@@ -260,7 +305,7 @@ export default function LandingPage() {
           <div className="flex-1 flex items-center justify-center px-6">
             <div className="w-full max-w-3xl">
               {/* Greeting */}
-              <h2 className="text-4xl md:text-4xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-12">
+              <h2 className="text-4xl md:text-4xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-8 pb-2" style={{ lineHeight: '1.3' }}>
                 {greeting}
               </h2>
 
@@ -284,6 +329,47 @@ export default function LandingPage() {
                   </button>
                 </div>
               </form>
+
+              {/* Ask Alma's Choice - Below searchbar, right corner */}
+              <div className="flex justify-end mt-2">
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSuggestedDropdown(!showSuggestedDropdown)}
+                    type="button"
+                    className="px-3 py-2 bg-white border-0 shadow-lg rounded-full text-xs text-gray-700 hover:text-[#003865] transition flex items-center gap-1.5"
+                  >
+                    <img 
+                      src="/Icon.png" 
+                      alt="Alma" 
+                      className="w-4 h-4 object-contain"
+                    />
+                    <span>Ask Alma's Choice</span>
+                    <svg className={`w-3 h-3 transition-transform ${showSuggestedDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {showSuggestedDropdown && (
+                    <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-lg border p-4 w-80 z-10 max-h-96 overflow-y-auto">
+                      <div className="grid grid-cols-1 gap-2">
+                        {placeholders.map((q, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => {
+                              setSearchQuery(q);
+                              setShowSuggestedDropdown(false);
+                            }}
+                            className="text-left text-sm bg-gray-50 hover:bg-blue-50 rounded-xl px-4 py-3 transition border border-gray-200"
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         ) : (
@@ -298,9 +384,10 @@ export default function LandingPage() {
                     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
                   };
                   
-                  return (
-                    <div key={i} className={`max-w-2xl w-fit flex items-start gap-3 ${msg.from === 'user' ? 'ml-auto flex-row-reverse' : 'self-start'}`}>
-                      {msg.from === 'alma' && (
+                  // Alma message with bubble
+                  if (msg.from === 'alma') {
+                    return (
+                      <div key={i} className="flex items-start gap-3 w-full max-w-2xl">
                         <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                           <img
                             src="/Icon.png"
@@ -309,28 +396,40 @@ export default function LandingPage() {
                             style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                           />
                         </div>
-                      )}
+                        <div>
+                          <div className="px-4 py-2 rounded-3xl bg-white border shadow-sm">
+                            <div className="whitespace-pre-wrap">
+                              {typingMessageIndex === i ? (
+                                <>
+                                  <MarkdownText text={displayedText} />
+                                  <span className="animate-pulse">|</span>
+                                </>
+                              ) : (
+                                <MarkdownText text={msg.text} />
+                              )}
+                            </div>
+                          </div>
+                          {msg.timestamp && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {formatTime(msg.timestamp)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // User message: keep bubble style
+                  return (
+                    <div key={i} className="flex items-start gap-3 ml-auto flex-row-reverse max-w-2xl w-fit">
                       <div>
-                        <div
-                          className={`px-4 py-2 rounded-3xl ${
-                            msg.from === 'user'
-                              ? 'bg-[#B9D9EB] text-gray-900'
-                              : 'bg-white border shadow-sm'
-                          }`}
-                        >
+                        <div className="px-4 py-2 rounded-3xl bg-[#B9D9EB] text-gray-900">
                           <div className="whitespace-pre-wrap">
-                            {typingMessageIndex === i && msg.from === 'alma' ? (
-                              <>
-                                <MarkdownText text={displayedText} />
-                                <span className="animate-pulse">|</span>
-                              </>
-                            ) : (
-                              <MarkdownText text={msg.text} />
-                            )}
+                            <MarkdownText text={msg.text} />
                           </div>
                         </div>
                         {msg.timestamp && (
-                          <p className={`text-xs text-gray-500 mt-1 ${msg.from === 'user' ? 'text-right' : 'text-left'}`}>
+                          <p className="text-xs text-gray-500 mt-1 text-right">
                             {formatTime(msg.timestamp)}
                           </p>
                         )}
@@ -339,7 +438,7 @@ export default function LandingPage() {
                   );
                 })}
                 {isSending && (
-                  <div className="max-w-2xl w-fit flex items-start gap-3 self-start">
+                  <div className="flex items-start gap-3 w-full max-w-2xl">
                     <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                       <img
                         src="/Icon.png"

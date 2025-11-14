@@ -81,23 +81,67 @@ function parseMarkdownBold(text) {
   return parts;
 }
 
-// Component to render parsed markdown text
-function MarkdownText({ text }) {
-  const parts = parseMarkdownBold(text);
+// Helper to render a single line with bold formatting
+function renderLineWithFormatting(line, key) {
+  const parts = parseMarkdownBold(line);
   
   if (parts.length === 0) {
-    return <>{text}</>;
+    return line;
   }
   
   return (
-    <>
+    <React.Fragment key={key}>
       {parts.map((part, idx) => (
         part.type === 'bold' ? (
-          <strong key={idx}>{part.content}</strong>
+          <strong key={`${key}-${idx}`}>{part.content}</strong>
         ) : (
-          <React.Fragment key={idx}>{part.content}</React.Fragment>
+          <React.Fragment key={`${key}-${idx}`}>{part.content}</React.Fragment>
         )
       ))}
+    </React.Fragment>
+  );
+}
+
+// Component to render parsed markdown text with proper line breaks and lists
+function MarkdownText({ text }) {
+  if (!text) return null;
+  
+  const lines = text.split('\n');
+  
+  return (
+    <>
+      {lines.map((line, idx) => {
+        // Check if it's a bullet point (starts with - or *)
+        if (line.trim().match(/^[-*]\s+/)) {
+          return (
+            <div key={idx} className="flex gap-2 my-1">
+              <span>•</span>
+              <span>{renderLineWithFormatting(line.trim().replace(/^[-*]\s+/, ''), `line-${idx}`)}</span>
+            </div>
+          );
+        }
+        
+        // Check if it's a numbered list (starts with number.)
+        if (line.trim().match(/^\d+\.\s+/)) {
+          const match = line.trim().match(/^(\d+)\.\s+(.*)/);
+          if (match) {
+            return (
+              <div key={idx} className="flex gap-2 my-1">
+                <span>{match[1]}.</span>
+                <span>{renderLineWithFormatting(match[2], `line-${idx}`)}</span>
+              </div>
+            );
+          }
+        }
+        
+        // Regular line - add line break if not the last line
+        return (
+          <React.Fragment key={idx}>
+            {renderLineWithFormatting(line, `line-${idx}`)}
+            {idx < lines.length - 1 && <br />}
+          </React.Fragment>
+        );
+      })}
     </>
   );
 }
@@ -149,13 +193,10 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
-  return (
-    <div
-      className={`max-w-2xl w-fit flex items-start gap-3 ${
-        from === "alma" ? "self-start" : "ml-auto flex-row-reverse"
-      }`}
-    >
-      {from === "alma" && (
+  if (from === "alma") {
+    // Alma message with bubble
+    return (
+      <div className="flex items-start gap-3 w-full max-w-2xl">
         <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
           <img
             src="/Icon.png"
@@ -166,29 +207,41 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
             decoding="async"
           />
         </div>
-      )}
+        <div>
+          <div className="px-4 py-2 rounded-3xl bg-white border shadow-sm">
+            <div className="whitespace-pre-wrap">
+              {isTyping ? (
+                <TypingText 
+                  text={text} 
+                  speed={8} 
+                  onComplete={() => {}}
+                />
+              ) : (
+                <MarkdownText text={text} />
+              )}
+            </div>
+          </div>
+          {timestamp && (
+            <p className="text-xs text-gray-500 mt-1">
+              {formatTime(timestamp)}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // User message: keep bubble style
+  return (
+    <div className="flex items-start gap-3 ml-auto flex-row-reverse max-w-2xl w-fit">
       <div>
-        <div
-          className={`px-4 py-2 rounded-3xl ${
-            from === "alma"
-              ? "bg-white border shadow-sm"
-              : "bg-[#B9D9EB] text-gray-900"
-          }`}
-        >
+        <div className="px-4 py-2 rounded-3xl bg-[#B9D9EB] text-gray-900">
           <div className="whitespace-pre-wrap">
-            {from === "alma" && isTyping ? (
-              <TypingText 
-                text={text} 
-                speed={8} 
-                onComplete={() => {}}
-              />
-            ) : (
-              <MarkdownText text={text} />
-            )}
+            <MarkdownText text={text} />
           </div>
         </div>
         {timestamp && (
-          <p className={`text-xs text-gray-500 mt-1 ${from === "alma" ? "text-left" : "text-right"}`}>
+          <p className="text-xs text-gray-500 mt-1 text-right">
             {formatTime(timestamp)}
           </p>
         )}
@@ -202,12 +255,21 @@ function SuggestedQuestion({ text, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="text-left text-sm bg-white border hover:bg-blue-50 rounded-lg px-3 py-2 shadow-sm transition"
+      className="text-left text-sm bg-white border hover:bg-blue-50 rounded-2xl px-4 py-3 shadow-sm transition"
     >
       {text}
     </button>
   );
 }
+
+// Greeting options for variation
+const greetings = [
+  "What's on your mind today?",
+  "How can I help you?",
+  "What would you like to know?",
+  "Ask me anything about Columbia!",
+  "Ready to explore?",
+];
 
 // Main
 export default function AskAlma() {
@@ -229,7 +291,19 @@ export default function AskAlma() {
   const [editingConvId, setEditingConvId] = useState(null);
   const [editingValue, setEditingValue] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showProfileSelector, setShowProfileSelector] = useState(false);
+  const [selectedProfilePic, setSelectedProfilePic] = useState(() => {
+    return localStorage.getItem('profilePic') || '/Alma_pfp.png';
+  });
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
+  const [greeting, setGreeting] = useState('');
+  const [showSuggestedDropdown, setShowSuggestedDropdown] = useState(false);
+
+  // Set random greeting on mount
+  useEffect(() => {
+    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    setGreeting(randomGreeting);
+  }, []);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -495,6 +569,12 @@ export default function AskAlma() {
     setEditingValue("");
   };
 
+  const handleProfileSelect = (profilePic) => {
+    setSelectedProfilePic(profilePic);
+    localStorage.setItem('profilePic', profilePic);
+    setShowProfileSelector(false);
+  };
+
   return (
     <div className="flex w-screen h-screen bg-almaGray">
       {/* Mobile overlay backdrop */}
@@ -609,13 +689,20 @@ export default function AskAlma() {
         </div>
         
         <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-gray-400" />
-            <div>
+          <button 
+            onClick={() => setShowProfileSelector(true)}
+            className="flex items-center gap-2 w-full hover:bg-gray-200 p-2 rounded-lg transition"
+          >
+            <img 
+              src={selectedProfilePic} 
+              alt="Profile" 
+              className="w-8 h-8 rounded-full object-cover"
+            />
+            <div className="text-left">
               <p className="font-semibold truncate">{user?.email || 'Columbia Student'}</p>
-              <p className="text-xs text-gray-500">View Profile</p>
+              <p className="text-xs text-gray-500">Change Profile Picture</p>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -658,104 +745,175 @@ export default function AskAlma() {
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
-          <div className="flex flex-col space-y-4">
-            {messages.map((msg, i) => (
-              <ChatMessage 
-                key={i} 
-                from={msg.from} 
-                text={msg.text}
-                sources={msg.sources}
-                timestamp={msg.timestamp}
-                isTyping={msg.from === "alma" && i === latestMessageIndex}
-              />
-            ))}
-            
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="max-w-2xl w-fit flex items-start gap-3 self-start">
-                <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
-                  <img
-                    src="/Icon.png"
-                    alt="AskAlma"
-                    className="logo-no-bg"
-                    style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
+        {messages.length === 0 ? (
+          // Centered greeting view when no messages (like landing page)
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex items-center justify-center px-6">
+              <div className="w-full max-w-3xl">
+                {/* Greeting */}
+                <h2 className="text-4xl md:text-5xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-8 pb-2" style={{ lineHeight: '1.3' }}>
+                  {greeting}
+                </h2>
+
+                {/* Search Bar */}
+                <div className="relative">
+                  <textarea
+                    placeholder="Ask me anything about Columbia..."
+                    className="w-full px-6 py-4 pr-14 text-lg bg-white text-gray-900 placeholder-gray-400 border-0 rounded-full focus:outline-none resize-none shadow-lg"
+                    style={{ outline: 'none' }}
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    rows={1}
                   />
+                  <button
+                    onClick={handleSend}
+                    disabled={isLoading || !input.trim()}
+                    className={`absolute right-3 top-[50%] -translate-y-1/2 p-2 rounded-full transition ${
+                      isLoading || !input.trim()
+                        ? "bg-gray-300 cursor-not-allowed"
+                        : "bg-[#003865] text-white hover:bg-[#002d4f]"
+                    }`}
+                  >
+                    <ArrowUp className="w-5 h-5" />
+                  </button>
                 </div>
-                <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
-                  <div className="flex items-center gap-2">
-                    <ThinkingAnimation />
-                    <span className="text-sm text-gray-600">Thinking...</span>
+
+                {/* Ask Alma's Choice - Below searchbar, right corner */}
+                <div className="flex justify-end mt-2">
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowSuggestedDropdown(!showSuggestedDropdown)}
+                      className="px-3 py-2 bg-white border-0 shadow-lg rounded-full text-xs text-gray-700 hover:text-[#003865] transition flex items-center gap-1.5"
+                    >
+                      <img 
+                        src="/Icon.png" 
+                        alt="Alma" 
+                        className="w-4 h-4 object-contain"
+                      />
+                      <span>Ask Alma's Choice</span>
+                      <svg className={`w-3 h-3 transition-transform ${showSuggestedDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    
+                    {showSuggestedDropdown && (
+                      <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-lg border p-4 w-80 z-10 max-h-96 overflow-y-auto">
+                        <div className="grid grid-cols-1 gap-2">
+                          {suggested.map((q, i) => (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                handleSendQuery(q);
+                                setShowSuggestedDropdown(false);
+                              }}
+                              className="text-left text-sm bg-gray-50 hover:bg-blue-50 rounded-xl px-4 py-3 transition border border-gray-200"
+                            >
+                              {q}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-            )}
-            
-            {/* Error message */}
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                <strong>Error:</strong> {error}
-              </div>
-            )}
-            
-            {/* Invisible div for auto-scrolling */}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-
-        {/* Suggested questions - positioned above input bar */}
-        {showSuggestions && messages.length <= 1 && (
-          <div className="flex-shrink-0 px-6 py-3 bg-almaGray">
-            <div className="max-w-5xl mx-auto">
-              <p className="text-gray-500 mb-2 font-medium hidden md:block">Suggested questions:</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {suggested.map((q, i) => (
-                <SuggestedQuestion
-                  key={i}
-                  text={q}
-                  onClick={() => handleSendQuery(q)}
-                />
-              ))}
-              </div>
             </div>
           </div>
+        ) : (
+          // Normal chat view with messages
+          <>
+            <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
+              <div className="flex flex-col space-y-4">
+                {messages.map((msg, i) => (
+                  <ChatMessage 
+                    key={i} 
+                    from={msg.from} 
+                    text={msg.text}
+                    sources={msg.sources}
+                    timestamp={msg.timestamp}
+                    isTyping={msg.from === "alma" && i === latestMessageIndex}
+                  />
+                ))}
+                
+                {/* Loading indicator */}
+                {isLoading && (
+                  <div className="max-w-2xl w-fit flex items-start gap-3 self-start">
+                    <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+                      <img
+                        src="/Icon.png"
+                        alt="AskAlma"
+                        className="logo-no-bg"
+                        style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
+                      />
+                    </div>
+                    <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
+                      <div className="flex items-center gap-2">
+                        <ThinkingAnimation />
+                        <span className="text-sm text-gray-600">Thinking...</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Error message */}
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    <strong>Error:</strong> {error}
+                  </div>
+                )}
+                
+                {/* Invisible div for auto-scrolling */}
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+
+            {/* Input bar - ChatGPT style */}
+            <div className="flex-shrink-0 p-4 bg-almaGray">
+              <div className="max-w-5xl mx-auto flex items-end gap-2">
+                <div className="flex-1 relative">
+                  <textarea
+                    placeholder="Message AskAlma..."
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    rows={1}
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={isLoading || !input.trim()}
+                    className={`absolute right-2 top-[45%] -translate-y-1/2 p-2 rounded-full transition flex items-center justify-center ${
+                      isLoading || !input.trim()
+                        ? "bg-gray-300 cursor-not-allowed"
+                        : "bg-[#003865] text-white hover:bg-[#002d4f]"
+                    }`}
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
         )}
-
-        {/* Input bar - ChatGPT style */}
-        <div className="flex-shrink-0 p-4 bg-almaGray">
-          <div className="max-w-5xl mx-auto flex items-end gap-2">
-            <div className="flex-1 relative">
-              <textarea
-                placeholder="Message AskAlma..."
-                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  e.target.style.height = 'auto';
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                rows={1}
-              />
-              <button
-                onClick={handleSend}
-                disabled={isLoading || !input.trim()}
-                className={`absolute right-2 top-[45%] -translate-y-1/2 p-2 rounded-full transition flex items-center justify-center ${
-                  isLoading || !input.trim()
-                    ? "bg-gray-300 cursor-not-allowed"
-                    : "bg-[#003865] text-white hover:bg-[#002d4f]"
-                }`}
-              >
-                <ArrowUp className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Context Menu */}
@@ -810,6 +968,49 @@ export default function AskAlma() {
                 Delete
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Picture Selector Modal */}
+      {showProfileSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowProfileSelector(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Choose Your Profile Picture</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => handleProfileSelect('/Alma_pfp.png')}
+                className={`p-4 border-2 rounded-lg hover:bg-gray-50 transition ${
+                  selectedProfilePic === '/Alma_pfp.png' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                }`}
+              >
+                <img 
+                  src="/Alma_pfp.png" 
+                  alt="Alma Profile" 
+                  className="w-full h-auto rounded-lg mb-2"
+                />
+                <p className="text-sm font-medium text-center">Alma</p>
+              </button>
+              <button
+                onClick={() => handleProfileSelect('/Roaree_pfp.png')}
+                className={`p-4 border-2 rounded-lg hover:bg-gray-50 transition ${
+                  selectedProfilePic === '/Roaree_pfp.png' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                }`}
+              >
+                <img 
+                  src="/Roaree_pfp.png" 
+                  alt="Roaree Profile" 
+                  className="w-full h-auto rounded-lg mb-2"
+                />
+                <p className="text-sm font-medium text-center">Roaree</p>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowProfileSelector(false)}
+              className="mt-4 w-full px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

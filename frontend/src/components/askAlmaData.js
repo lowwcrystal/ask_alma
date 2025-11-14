@@ -1,12 +1,6 @@
 // src/AskAlma/askAlmaData.js
 
-export const initialMessages = [
-  {
-    from: "alma",
-    text: "Hi! I'm AskAlma, your AI advisor for Columbia University. I can help you with course selection, registration, understanding the Core Curriculum, and navigating academic life at Columbia. What would you like to know?",
-    timestamp: new Date().toISOString(),
-  },
-];
+export const initialMessages = [];
 
 export const suggestedQuestions = [
   "What courses should I take as a Computer Science major?",
