@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowUp, LogOut, Menu, X, MoreVertical } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { initialMessages, suggestedQuestions as initialSuggested, categorizedQuestions } from "./askAlmaData";
+import { categorizedQuestions } from "./askAlmaData";
 
 // Get API URL based on environment
 const getApiUrl = () => {
@@ -250,17 +250,6 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
   );
 }
 
-// Suggested question component
-function SuggestedQuestion({ text, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className="text-left text-sm bg-white border hover:bg-blue-50 rounded-2xl px-4 py-3 shadow-sm transition"
-    >
-      {text}
-    </button>
-  );
-}
 
 // Greeting options for variation
 const greetings = [
@@ -273,10 +262,8 @@ const greetings = [
 
 // Main
 export default function AskAlma() {
-  const [messages, setMessages] = useState(initialMessages);
-  const [suggested] = useState(initialSuggested);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(true);
   const [conversationId, setConversationId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -297,7 +284,6 @@ export default function AskAlma() {
   });
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
   const [greeting, setGreeting] = useState('');
-  const [showSuggestedDropdown, setShowSuggestedDropdown] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [hoveredQuestion, setHoveredQuestion] = useState(null);
 
@@ -383,7 +369,6 @@ export default function AskAlma() {
     const userMessage = { from: "user", text: queryText, timestamp: now };
     
     setMessages(prev => [...prev, userMessage]);
-    setShowSuggestions(false);
     setIsLoading(true);
     setError(null);
 
@@ -493,7 +478,6 @@ export default function AskAlma() {
       // Update state with loaded conversation
       setConversationId(convId);
       setMessages(loadedMessages);
-      setShowSuggestions(false);
       setError(null);
       setLatestMessageIndex(-1); // Don't animate old messages
       setMobileMenuOpen(false); // Close mobile menu after loading conversation
@@ -511,7 +495,6 @@ export default function AskAlma() {
   const startNewChat = () => {
     setMessages([]);
     setConversationId(null);
-    setShowSuggestions(false);
     setError(null);
     setLatestMessageIndex(-1);
     setMobileMenuOpen(false); // Close mobile menu after starting new chat

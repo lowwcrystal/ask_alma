@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowUp } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 import { categorizedQuestions } from './askAlmaData';
 
 // Get API URL based on environment
@@ -152,18 +152,8 @@ const greetings = [
   "Ready to explore?",
 ];
 
-const placeholders = [
-  "Ask for course suggestions",
-  "Ask for first year requirements",
-  "Ask about registration",
-  "Ask about the Core Curriculum",
-  "Ask about prerequisites",
-  "Ask about academic advisors",
-];
-
 export default function LandingPage() {
   const [greeting, setGreeting] = useState('');
-  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [messages, setMessages] = useState([]);
   const [showChat, setShowChat] = useState(false);
@@ -173,7 +163,6 @@ export default function LandingPage() {
   const [typingMessageIndex, setTypingMessageIndex] = useState(null);
   const [displayedText, setDisplayedText] = useState('');
   const messagesEndRef = useRef(null);
-  const [showSuggestedDropdown, setShowSuggestedDropdown] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [hoveredQuestion, setHoveredQuestion] = useState(null);
 
@@ -182,16 +171,6 @@ export default function LandingPage() {
     const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
     setGreeting(randomGreeting);
   }, []);
-
-  // Cycle through placeholders (only when not in chat mode)
-  useEffect(() => {
-    if (showChat) return;
-    const interval = setInterval(() => {
-      setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
-    }, 3000); // Change every 3 seconds
-
-    return () => clearInterval(interval);
-  }, [showChat]);
 
   // Close category dropdowns when clicking outside
   useEffect(() => {
