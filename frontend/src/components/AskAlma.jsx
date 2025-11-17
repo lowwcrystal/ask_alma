@@ -300,6 +300,9 @@ export default function AskAlma() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [greeting, setGreeting] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState({});
+  const [hoveredQuestion, setHoveredQuestion] = useState(null);
 
   const schoolLabel = profile?.school ? getSchoolLabel(profile.school) : null;
   const academicYearLabel = profile?.academic_year ? getAcademicYearLabel(profile.academic_year) : null;
@@ -316,6 +319,12 @@ export default function AskAlma() {
     }
     return segments.join(' — ') || 'Update your academic profile';
   })();
+
+  // Set random greeting on mount
+  useEffect(() => {
+    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    setGreeting(randomGreeting);
+  }, []);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -571,7 +580,6 @@ export default function AskAlma() {
   const startNewChat = () => {
     setMessages([]);
     setConversationId(null);
-    setShowSuggestions(true);
     setError(null);
     setLatestMessageIndex(-1);
     setMobileMenuOpen(false); // Close mobile menu after starting new chat
@@ -907,25 +915,9 @@ export default function AskAlma() {
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
-
-        {/* Suggested questions - positioned above input bar */}
-        {showSuggestions && messages.length <= 1 && (
-          <div className="flex-shrink-0 px-6 py-3 bg-almaGray">
-            <div className="max-w-5xl mx-auto">
-              <p className="text-gray-500 mb-2 font-medium hidden md:block">Suggested questions:</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {suggested.map((q, i) => (
-                <SuggestedQuestion
-                  key={i}
-                  text={q}
-                  onClick={() => handleSendQuery(q)}
-                />
-              ))}
-              </div>
-            </div>
 
         {/* Input bar - ChatGPT style */}
         <div className="flex-shrink-0 p-4 bg-almaGray">
@@ -965,8 +957,8 @@ export default function AskAlma() {
                 <ArrowUp className="w-4 h-4" />
               </button>
             </div>
-          </>
-        )}
+          </div>
+        </div>
       </div>
 
       <ProfileModal

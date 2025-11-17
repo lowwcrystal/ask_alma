@@ -164,6 +164,8 @@ export default function LandingPage() {
   const [displayedText, setDisplayedText] = useState('');
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const [expandedCategories, setExpandedCategories] = useState({});
+  const [hoveredQuestion, setHoveredQuestion] = useState(null);
 
   // Set random greeting on mount
   useEffect(() => {
