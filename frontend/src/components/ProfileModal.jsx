@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { X, LogOut } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { X, LogOut, Loader2 } from 'lucide-react';
 import { ACADEMIC_YEAR_OPTIONS, SCHOOL_OPTIONS } from '../constants/profile';
 
 const parseListInput = (input) => {
@@ -32,24 +32,59 @@ export default function ProfileModal({
   const [profileImage, setProfileImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [imageError, setImageError] = useState(null);
+  const initialValuesRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-    setSchool(profile?.school || '');
-    setAcademicYear(profile?.academic_year || '');
-    setMajor(profile?.major || '');
-    setMinorsInput(formatListForInput(profile?.minors || []));
-    setClassesInput(formatListForInput(profile?.classes_taken || []));
-    setProfileImage(profile?.profile_image || null);
-    setImagePreview(profile?.profile_image || null);
+    const initialSchool = profile?.school || '';
+    const initialAcademicYear = profile?.academic_year || '';
+    const initialMajor = profile?.major || '';
+    const initialMinors = formatListForInput(profile?.minors || []);
+    const initialClasses = formatListForInput(profile?.classes_taken || []);
+    const initialImage = profile?.profile_image || null;
+
+    setSchool(initialSchool);
+    setAcademicYear(initialAcademicYear);
+    setMajor(initialMajor);
+    setMinorsInput(initialMinors);
+    setClassesInput(initialClasses);
+    setProfileImage(initialImage);
+    setImagePreview(initialImage);
     setImageError(null);
+
+    // Store initial values for comparison
+    initialValuesRef.current = {
+      school: initialSchool,
+      academicYear: initialAcademicYear,
+      major: initialMajor,
+      minors: initialMinors,
+      classes: initialClasses,
+      image: initialImage,
+    };
   }, [isOpen, profile]);
+
+  // Check if any values have changed
+  const hasChanges = () => {
+    if (!initialValuesRef.current) return false;
+    const initial = initialValuesRef.current;
+    
+    return (
+      school !== initial.school ||
+      academicYear !== initial.academicYear ||
+      major !== initial.major ||
+      minorsInput !== initial.minors ||
+      classesInput !== initial.classes ||
+      profileImage !== initial.image
+    );
+  };
 
   if (!isOpen) {
     return null;
   }
+
+  const hasChangesValue = hasChanges();
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -332,9 +367,10 @@ export default function ProfileModal({
               <button
                 type="submit"
                 form="profile-form"
-                disabled={saving}
-                className="px-4 py-2 bg-[#003865] text-white text-sm font-medium rounded-lg hover:bg-[#002d4f] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={saving || !hasChangesValue}
+                className="px-4 py-2 bg-[#003865] text-white text-sm font-medium rounded-lg hover:bg-[#002d4f] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 {saving ? 'Saving...' : 'Save changes'}
               </button>
             </div>
