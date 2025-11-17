@@ -93,11 +93,14 @@ def embed_corpus(
         # Try batched embedding (LangChain embeds) with graceful fallback
         try:
             # Some backends support list input natively; we still batch to control memory.
-            for batch in tqdm(list(_batch(chunks, batch_size)), desc=f"Embedding [{model_name}]"):
+            batches = list(_batch(chunks, batch_size))
+            for batch in tqdm(batches, desc=f"Embedding [{model_name}]", unit="batch", 
+                            bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'):
                 vectors.extend(embedder.embed_documents(batch))
         except TypeError:
             # Fallback to per-item embedding if the backend doesn't support list calls
-            for t in tqdm(chunks, desc=f"Embedding [{model_name}]"):
+            for t in tqdm(chunks, desc=f"Embedding [{model_name}]", unit="chunk",
+                         bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'):
                 vectors.append(embedder.embed_query(t))
 
         arr = np.array(vectors, dtype="float32")
@@ -112,11 +115,11 @@ def embed_corpus(
 
 
 # ---------- 4) OPTIONAL PERSIST HELPERS ----------
-def save_numpy_bundle(result: Dict[str, Dict[str, Any]], out_dir: str = "./emb_out"):
+def save_numpy_bundle(result: Dict[str, Dict[str, Any]], metadata: List[Dict[str, Any]] = None, out_dir: str = "./emb_out"):
     """
     Saves:
       - {model}.npy: embeddings
-      - {model}.meta.tsv: id<TAB>text
+      - {model}.meta.tsv: id<TAB>text<TAB>source
     """
     import os
     os.makedirs(out_dir, exist_ok=True)
@@ -128,8 +131,10 @@ def save_numpy_bundle(result: Dict[str, Dict[str, Any]], out_dir: str = "./emb_o
 
         np.save(npy_path, payload["embeddings"])
         with open(meta_path, "w", encoding="utf-8") as f:
-            for _id, txt in zip(payload["ids"], payload["texts"]):
-                f.write(f"{_id}\t{txt.replace('\n',' ')}\n")
+            for i, (_id, txt) in enumerate(zip(payload["ids"], payload["texts"])):
+                # Get source from metadata if available
+                source = metadata[i].get("source", "unknown") if metadata and i < len(metadata) else "unknown"
+                f.write(f"{_id}\t{txt.replace('\n',' ')}\t{source}\n")
 
         print(f"Saved: {npy_path} ({payload['embeddings'].shape})")
         print(f"Saved: {meta_path}")
@@ -155,7 +160,9 @@ def load_chunks_from_jsonl(file_paths: List[str]) -> tuple[List[str], List[Dict[
             for line in f:
                 if line.strip():  # Skip empty lines
                     data = json.loads(line)
-                    chunks.append(data["page_content"])
+                    # Support both 'page_content' and 'text' fields
+                    text = data.get("page_content") or data.get("text", "")
+                    chunks.append(text)
                     metadata.append({
                         "page_index": data.get("page_index", None),
                         "source": data.get("source", "unknown")
@@ -174,14 +181,12 @@ if __name__ == "__main__":
     load_dotenv()
     
     # Path to the JSONL files (relative to embedder.py location)
-    # embedder.py is in: src/embedder/embeddings/embedder.py
+    # embedder.py is in: src/embedder/embedder.py
     # JSONL files are in the root directory
-    base_path = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+    base_path = os.path.join(os.path.dirname(__file__), "..", "..")
     
     jsonl_files = [
-        os.path.join(base_path, "barnard_2024_2025.jsonl"),
-        os.path.join(base_path, "columbia_college_2024_2025.jsonl"),
-        os.path.join(base_path, "columbia_engineering_2024_2025.jsonl"),
+        os.path.join(base_path, "chunked_all_bulletins.jsonl"),
     ]
     
     # Load chunks from JSONL files
@@ -193,4 +198,4 @@ if __name__ == "__main__":
     for name, payload in result.items():
         print(f"{name}: {payload['embeddings'].shape}, dim: {payload['dim']}")
     
-    save_numpy_bundle(result, out_dir="./emb_out")
+    save_numpy_bundle(result, metadata=metadata, out_dir="./emb_out")

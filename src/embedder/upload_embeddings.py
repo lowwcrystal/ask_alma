@@ -82,13 +82,17 @@ except Exception as e:
 # ------------------------
 # Load metadata & sanity checks
 # ------------------------
-ids, texts = [], []
+ids, texts, sources = [], [], []
 try:
     with open(META_PATH, "r", encoding="utf-8") as f:
         for line in f:
-            _id, text = line.rstrip("\n").split("\t", 1)
+            parts = line.rstrip("\n").split("\t")
+            _id = parts[0]
+            text = parts[1] if len(parts) > 1 else ""
+            source = parts[2] if len(parts) > 2 else "unknown"
             ids.append(_id)
             texts.append(text)
+            sources.append(source)
 except Exception as e:
     cur.close()
     conn.close()
@@ -98,6 +102,19 @@ if len(ids) != n_rows:
     cur.close()
     conn.close()
     sys.exit(f"Row mismatch: {len(ids)} meta lines vs {n_rows} embedding rows")
+
+# ------------------------
+# Delete all existing embeddings first
+# ------------------------
+print("Deleting all existing embeddings from Supabase...")
+try:
+    cur.execute(f"delete from {TABLE_NAME};")
+    deleted_count = cur.rowcount
+    print(f"✓ Deleted {deleted_count} old embeddings.")
+except Exception as e:
+    cur.close()
+    conn.close()
+    sys.exit(f"Failed to delete old embeddings: {e}")
 
 # ------------------------
 # Bulk upsert in batches
@@ -123,7 +140,7 @@ try:
             batch_rows.append((
                 ids[i],
                 texts[i],
-                "manual",             # source
+                sources[i] if i < len(sources) else "unknown",  # source from metadata
                 "text-embedding-3-small",   # model (keep consistent)
                 vec_literal,          # vector literal for pgvector
             ))

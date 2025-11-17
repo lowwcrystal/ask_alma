@@ -405,38 +405,97 @@ def rag_answer(
         pass  # if extension/version doesn't support it, ignore
 
     # Query top-k (cosine distance). Similarity = 1 - distance.
+    # Prioritize 2026 sources, fall back to 2024-2025 if needed
     vec_literal = "[" + ",".join(f"{x:.8f}" for x in q_vec) + "]"
 
-    filtered_rows = []
+    rows = []
     school_filter = get_school_source_filter(profile.get("school") if profile else None)
+    
+    # Define 2026 source patterns (prioritized)
+    sources_2026 = ["seas_2026.json", "barnard_2026.json", "columbia_college_2026.json"]
+    
+    # Step 1: Get results from 2026 sources first (prioritized)
+    # Build 2026 source filter
+    source_2026_filter = " OR ".join([f"source ILIKE '%{s}%'" for s in sources_2026])
+    
     if school_filter:
-        filtered_sql = f"""
+        # If user has school filter, apply it to 2026 sources
+        priority_sql = f"""
             select
               id,
               content,
-              1 - (embedding <=> %s::vector) as similarity
+              1 - (embedding <=> %s::vector) as similarity,
+              source
             from {table_name}
-            where source ILIKE %s
+            where ({source_2026_filter}) AND source ILIKE %s
             order by embedding <=> %s::vector
             limit %s;
         """
-        cur.execute(filtered_sql, (vec_literal, school_filter, vec_literal, TOP_K))
-        filtered_rows = cur.fetchall()
-
-    if filtered_rows:
-        rows = filtered_rows
+        cur.execute(priority_sql, (vec_literal, school_filter, vec_literal, TOP_K))
     else:
-        base_sql = f"""
+        # No school filter, get all 2026 sources
+        priority_sql = f"""
             select
               id,
               content,
-              1 - (embedding <=> %s::vector) as similarity
+              1 - (embedding <=> %s::vector) as similarity,
+              source
             from {table_name}
+            where {source_2026_filter}
             order by embedding <=> %s::vector
             limit %s;
         """
-        cur.execute(base_sql, (vec_literal, vec_literal, TOP_K))
-        rows = cur.fetchall()
+        cur.execute(priority_sql, (vec_literal, vec_literal, TOP_K))
+    
+    priority_rows = cur.fetchall()
+    rows.extend(priority_rows)
+    existing_ids = {row["id"] for row in rows}
+    
+    # Step 2: Fill remaining slots with 2024-2025 sources if needed
+    if len(rows) < TOP_K:
+        remaining = TOP_K - len(rows)
+        
+        # Build exclusion for 2026 sources
+        exclude_2026 = " AND ".join([f"source NOT ILIKE '%{s}%'" for s in sources_2026])
+        
+        if school_filter:
+            fallback_sql = f"""
+                select
+                  id,
+                  content,
+                  1 - (embedding <=> %s::vector) as similarity,
+                  source
+                from {table_name}
+                where source ILIKE %s AND {exclude_2026}
+                order by embedding <=> %s::vector
+                limit %s;
+            """
+            cur.execute(fallback_sql, (vec_literal, school_filter, vec_literal, remaining))
+        else:
+            fallback_sql = f"""
+                select
+                  id,
+                  content,
+                  1 - (embedding <=> %s::vector) as similarity,
+                  source
+                from {table_name}
+                where {exclude_2026}
+                order by embedding <=> %s::vector
+                limit %s;
+            """
+            cur.execute(fallback_sql, (vec_literal, vec_literal, remaining))
+        
+        fallback_rows = cur.fetchall()
+        # Filter out duplicates and add to results
+        for row in fallback_rows:
+            if row["id"] not in existing_ids:
+                rows.append(row)
+                existing_ids.add(row["id"])
+                if len(rows) >= TOP_K:
+                    break
+    
+    # Sort final results by similarity (2026 results should naturally rank higher due to better matches)
+    rows = sorted(rows, key=lambda x: x["similarity"], reverse=True)[:TOP_K]
 
     cur.close()
 
