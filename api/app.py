@@ -9,6 +9,7 @@ import sys
 import os
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+from typing import List
 
 # Load .env from src/embedder/.env before importing rag_query
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +32,47 @@ CORS(app, resources={
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
+
+
+def _normalize_string_list(value) -> List[str]:
+    """
+    Coerce incoming value into a clean list of non-empty strings.
+    Supports comma-separated strings, iterables, or None.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        parts = [part.strip() for part in value.split(",")]
+        return [part for part in parts if part]
+    if isinstance(value, (list, tuple, set)):
+        cleaned = []
+        for item in value:
+            if item is None:
+                continue
+            text = str(item).strip()
+            if text:
+                cleaned.append(text)
+        return cleaned
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _serialize_profile(row):
+    """Convert database row into JSON-friendly profile payload."""
+    if not row:
+        return None
+    return {
+        'user_id': row.get('user_id'),
+        'school': row.get('school'),
+        'academic_year': row.get('academic_year'),
+        'major': row.get('major'),
+        'minors': row.get('minors') or [],
+        'classes_taken': row.get('classes_taken') or [],
+        'profile_image': row.get('profile_image'),
+        'created_at': row.get('created_at').isoformat() if row.get('created_at') else None,
+        'updated_at': row.get('updated_at').isoformat() if row.get('updated_at') else None,
+    }
+
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -153,6 +195,84 @@ def get_conversation(conversation_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/profile/<user_id>', methods=['GET'])
+def get_user_profile(user_id):
+    """Retrieve the stored academic profile for a Supabase user."""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT user_id,
+                   school,
+                   academic_year,
+                   major,
+                   minors,
+                   classes_taken,
+                   profile_image,
+                   created_at,
+                   updated_at
+            FROM user_profiles
+            WHERE user_id = %s;
+        """, (user_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not row:
+            return jsonify({'error': 'Profile not found'}), 404
+
+        return jsonify(_serialize_profile(row))
+
+    except Exception as e:
+        print(f"Error fetching profile for user_id={user_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/profile', methods=['POST', 'PUT'])
+def upsert_user_profile():
+    """Create or update a user's academic profile details."""
+    try:
+        data = request.json or {}
+        user_id = data.get('user_id')
+
+        if not user_id:
+            return jsonify({'error': 'user_id is required'}), 400
+
+        school = data.get('school')
+        academic_year = data.get('academic_year')
+        major = data.get('major')
+        minors = _normalize_string_list(data.get('minors'))
+        classes_taken = _normalize_string_list(data.get('classes_taken'))
+        profile_image = data.get('profile_image')
+
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO user_profiles (user_id, school, academic_year, major, minors, classes_taken, profile_image)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                school = EXCLUDED.school,
+                academic_year = EXCLUDED.academic_year,
+                major = EXCLUDED.major,
+                minors = EXCLUDED.minors,
+                classes_taken = EXCLUDED.classes_taken,
+                profile_image = EXCLUDED.profile_image,
+                updated_at = NOW()
+            RETURNING user_id, school, academic_year, major, minors, classes_taken, profile_image, created_at, updated_at;
+        """, (user_id, school, academic_year, major, minors, classes_taken, profile_image))
+        profile = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return jsonify(_serialize_profile(profile))
+
+    except Exception as e:
+        print(f"Error saving profile for user_id={data.get('user_id')}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/conversations', methods=['GET'])
 def list_conversations():
     """
@@ -234,6 +354,86 @@ def list_conversations():
         print(f"Error in /api/conversations: {e}")
         print(traceback.format_exc())
         return jsonify({'error': f'Failed to fetch conversations: {str(e)}'}), 500
+
+
+@app.route('/api/conversations/search', methods=['GET'])
+def search_conversations():
+    """
+    Search conversations by title or message content
+    
+    Query Parameters:
+        user_id: Supabase user ID to filter conversations
+        query: Search query string
+    
+    Response:
+    {
+        "conversations": [
+            {
+                "id": "uuid",
+                "title": "What are the core classes?",
+                "updated_at": "2025-01-15T10:30:00",
+                "message_count": 6
+            }
+        ]
+    }
+    """
+    try:
+        user_id = request.args.get('user_id')
+        search_query = request.args.get('query', '').strip()
+        
+        if not user_id:
+            return jsonify({'error': 'user_id is required'}), 400
+        
+        if not search_query:
+            return jsonify({'conversations': []}), 200
+        
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        
+        # Search in both conversation titles and message content
+        # Use ILIKE for case-insensitive search
+        search_pattern = f'%{search_query}%'
+        
+        cur.execute("""
+            SELECT DISTINCT
+                c.id,
+                c.title,
+                c.updated_at,
+                COUNT(m.id) as message_count
+            FROM conversations c
+            LEFT JOIN messages m ON c.id = m.conversation_id
+            WHERE c.user_id = %s
+                AND (
+                    c.title ILIKE %s
+                    OR m.content ILIKE %s
+                )
+            GROUP BY c.id, c.title, c.updated_at
+            ORDER BY c.updated_at DESC
+            LIMIT 50;
+        """, (user_id, search_pattern, search_pattern))
+        
+        conversations = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        # Format for frontend
+        result = [
+            {
+                'id': str(conv['id']),
+                'title': conv['title'] or 'Untitled Conversation',
+                'updated_at': conv['updated_at'].isoformat() if conv['updated_at'] else None,
+                'message_count': conv['message_count']
+            }
+            for conv in conversations
+        ]
+        
+        return jsonify({'conversations': result})
+    
+    except Exception as e:
+        import traceback
+        print(f"Error in /api/conversations/search: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': f'Failed to search conversations: {str(e)}'}), 500
 
 
 @app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
@@ -343,6 +543,8 @@ if __name__ == '__main__':
     print("   GET    /api/conversations/<id>")
     print("   PATCH  /api/conversations/<id>")
     print("   DELETE /api/conversations/<id>")
+    print("   GET    /api/profile/<user_id>")
+    print("   POST   /api/profile")
     print("="*60 + "\n")
     
     # Run the Flask server (port 5001 to avoid conflict with macOS AirPlay)

@@ -46,6 +46,44 @@ Each JSONL file should contain records with:
 - `page_index`: The page number (optional)
 - `source`: The source document name
 
+### 4. User Profiles Table
+
+To capture each student's academic context (year, major, minors, classes taken), run the migration located at `src/migrations/create_user_profiles.sql` against your Supabase/PostgreSQL database:
+
+```sql
+\i src/migrations/create_user_profiles.sql
+```
+
+The script creates the `user_profiles` table and an `updated_at` trigger used by the backend profile endpoints.
+
+If you have already created the table, run the follow-up migration to enable profile photo storage:
+
+```sql
+\i src/migrations/add_profile_image.sql
+```
+
+And run the school column migration to scope responses by school:
+
+```sql
+\i src/migrations/add_profile_school.sql
+```
+
+The `/api/profile` endpoint accepts the following payload:
+
+```json
+{
+  "user_id": "uuid",
+  "school": "columbia_engineering",
+  "academic_year": "junior",
+  "major": "Computer Science",
+  "minors": ["Statistics"],
+  "classes_taken": ["COMS 3134", "ECON 1105"],
+  "profile_image": "data:image/png;base64,...." // Optional data URL for the profile photo
+}
+```
+
+When a profile exists, the AskAlma chat endpoint automatically incorporates the student's school, year, major/minors, and completed classes into the RAG prompt. The assistant prioritizes sources tied to that school and avoids recommending courses the student has already finished.
+
 ## Usage
 
 ### Step 1: Generate Embeddings
