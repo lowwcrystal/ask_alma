@@ -369,18 +369,16 @@ export default function LandingPage() {
                               return { [catIdx]: true };
                             });
                           }}
-                          className="w-full px-3 py-3 text-left flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200"
+                          className="w-full px-3 py-3 flex items-center justify-center gap-1 bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200"
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <img 
-                              src={iconPath} 
-                              alt={category.category} 
-                              className="w-6 h-6 flex-shrink-0 object-contain"
-                            />
-                            <span className="font-semibold text-[#003865] text-sm whitespace-nowrap">{category.category}</span>
-                          </div>
+                          <img 
+                            src={iconPath} 
+                            alt={category.category} 
+                            className="w-6 h-6 flex-shrink-0 object-contain"
+                          />
+                          <span className="font-semibold text-[#003865] text-sm whitespace-nowrap">{category.category}</span>
                           <svg 
-                            className={`w-3 h-3 flex-shrink-0 ml-1 transition-transform ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
+                            className={`w-3 h-3 flex-shrink-0 transition-transform ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
                             fill="none" 
                             stroke="currentColor" 
                             viewBox="0 0 24 24"

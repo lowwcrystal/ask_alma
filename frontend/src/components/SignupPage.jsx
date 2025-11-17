@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ACADEMIC_YEAR_OPTIONS, SCHOOL_OPTIONS } from '../constants/profile';
 
@@ -262,6 +263,14 @@ export default function SignupPage() {
             </Link>
           </p>
         </form>
+
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center justify-center gap-2 text-gray-600 hover:text-[#003865] mt-6 transition mx-auto"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          <span className="text-sm font-medium">Back to home</span>
+        </button>
       </div>
     </div>
   );

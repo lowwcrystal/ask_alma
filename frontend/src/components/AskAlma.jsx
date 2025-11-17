@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowUp, LogOut, Menu, X, MoreVertical } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { categorizedQuestions } from "./askAlmaData";
+import ProfileModal from "./ProfileModal";
 
 // Get API URL based on environment
 const getApiUrl = () => {
@@ -269,6 +270,7 @@ export default function AskAlma() {
   const [error, setError] = useState(null);
   const [latestMessageIndex, setLatestMessageIndex] = useState(-1);
   const [conversations, setConversations] = useState([]);
+  const [conversationsLoading, setConversationsLoading] = useState(true);
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
   const { logout, user } = useAuth();
@@ -278,20 +280,44 @@ export default function AskAlma() {
   const [editingConvId, setEditingConvId] = useState(null);
   const [editingValue, setEditingValue] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showProfileSelector, setShowProfileSelector] = useState(false);
-  const [selectedProfilePic, setSelectedProfilePic] = useState(() => {
-    return localStorage.getItem('profilePic') || '/Alma_pfp.png';
-  });
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
   const [greeting, setGreeting] = useState('');
   const [expandedCategories, setExpandedCategories] = useState({});
   const [hoveredQuestion, setHoveredQuestion] = useState(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState(null);
 
   // Set random greeting on mount
   useEffect(() => {
     const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
     setGreeting(randomGreeting);
   }, []);
+
+  // Fetch user profile on mount
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/profile/${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          // Backend returns profile data directly, not wrapped
+          setProfile(data);
+        } else if (response.status === 404) {
+          // Profile doesn't exist yet, which is fine
+          setProfile(null);
+        }
+      } catch (err) {
+        console.error('Error fetching profile:', err);
+      }
+    };
+
+    fetchProfile();
+  }, [user]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -301,8 +327,12 @@ export default function AskAlma() {
   // Fetch user's conversations on mount
   useEffect(() => {
     const fetchConversations = async () => {
-      if (!user?.id) return; // Only fetch if user is logged in
+      if (!user?.id) {
+        setConversationsLoading(false);
+        return; // Only fetch if user is logged in
+      }
       
+      setConversationsLoading(true);
       try {
         const apiUrl = getApiUrl();
         const response = await fetch(`${apiUrl}/api/conversations?user_id=${user.id}`);
@@ -312,6 +342,8 @@ export default function AskAlma() {
         }
       } catch (err) {
         console.error('Error fetching conversations:', err);
+      } finally {
+        setConversationsLoading(false);
       }
     };
 
@@ -442,6 +474,7 @@ export default function AskAlma() {
   const fetchConversations = async () => {
     if (!user?.id) return;
     
+    setConversationsLoading(true);
     try {
       const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/conversations?user_id=${user.id}`);
@@ -451,6 +484,8 @@ export default function AskAlma() {
       }
     } catch (err) {
       console.error('Error fetching conversations:', err);
+    } finally {
+      setConversationsLoading(false);
     }
   };
 
@@ -571,10 +606,36 @@ export default function AskAlma() {
     setEditingValue("");
   };
 
-  const handleProfileSelect = (profilePic) => {
-    setSelectedProfilePic(profilePic);
-    localStorage.setItem('profilePic', profilePic);
-    setShowProfileSelector(false);
+  const handleProfileSave = async (updatedProfile) => {
+    setProfileLoading(true);
+    setProfileError(null);
+
+    try {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          ...updatedProfile,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save profile');
+      }
+
+      const data = await response.json();
+      // Backend returns profile data directly, not wrapped
+      setProfile(data);
+      setShowProfileModal(false);
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      setProfileError(err.message || 'Failed to save profile. Please try again.');
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
   return (
@@ -606,7 +667,11 @@ export default function AskAlma() {
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto mb-4">
           <h3 className="text-xs font-semibold text-gray-600 mb-2 px-2">Your Chats</h3>
-          {conversations.length === 0 ? (
+          {conversationsLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#003865]"></div>
+            </div>
+          ) : conversations.length === 0 ? (
             <p className="text-xs text-gray-500 px-2">No conversations yet</p>
           ) : (
             <div className="space-y-1">
@@ -692,17 +757,23 @@ export default function AskAlma() {
         
         <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3">
           <button 
-            onClick={() => setShowProfileSelector(true)}
+            onClick={() => setShowProfileModal(true)}
             className="flex items-center gap-2 w-full hover:bg-gray-200 p-2 rounded-lg transition"
           >
-            <img 
-              src={selectedProfilePic} 
-              alt="Profile" 
-              className="w-8 h-8 rounded-full object-cover"
-            />
-            <div className="text-left">
+            {profile?.profile_image ? (
+              <img 
+                src={profile.profile_image} 
+                alt="Profile" 
+                className="w-8 h-8 rounded-full object-cover border"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-xs font-semibold border">
+                {user?.email?.[0]?.toUpperCase() || 'U'}
+              </div>
+            )}
+            <div className="text-left flex-1 min-w-0">
               <p className="font-semibold truncate">{user?.email || 'Columbia Student'}</p>
-              <p className="text-xs text-gray-500">Change Profile Picture</p>
+              <p className="text-xs text-gray-500">View Profile</p>
             </div>
           </button>
         </div>
@@ -803,36 +874,34 @@ export default function AskAlma() {
                       
                       return (
                         <div key={catIdx} className="relative">
-                          <button
-                            onClick={() => {
-                              setExpandedCategories(prev => {
-                                // If this category is already open, close it
-                                if (prev[catIdx]) {
-                                  return {};
-                                }
-                                // Otherwise, close all and open only this one
-                                return { [catIdx]: true };
-                              });
-                            }}
-                            className="w-full px-3 py-3 text-left flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200"
+                        <button
+                          onClick={() => {
+                            setExpandedCategories(prev => {
+                              // If this category is already open, close it
+                              if (prev[catIdx]) {
+                                return {};
+                              }
+                              // Otherwise, close all and open only this one
+                              return { [catIdx]: true };
+                            });
+                          }}
+                          className="w-full px-3 py-3 flex items-center justify-center gap-1 bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200"
+                        >
+                          <img 
+                            src={iconPath} 
+                            alt={category.category} 
+                            className="w-6 h-6 flex-shrink-0 object-contain"
+                          />
+                          <span className="font-semibold text-[#003865] text-sm whitespace-nowrap">{category.category}</span>
+                          <svg 
+                            className={`w-3 h-3 flex-shrink-0 transition-transform ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
                           >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <img 
-                                src={iconPath} 
-                                alt={category.category} 
-                                className="w-6 h-6 flex-shrink-0 object-contain"
-                              />
-                              <span className="font-semibold text-[#003865] text-sm whitespace-nowrap">{category.category}</span>
-                            </div>
-                            <svg 
-                              className={`w-3 h-3 flex-shrink-0 ml-1 transition-transform ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
-                              fill="none" 
-                              stroke="currentColor" 
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
                         
                         {expandedCategories[catIdx] && (
                           <div 
@@ -1009,48 +1078,19 @@ export default function AskAlma() {
         </div>
       )}
 
-      {/* Profile Picture Selector Modal */}
-      {showProfileSelector && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowProfileSelector(false)}>
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">Choose Your Profile Picture</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => handleProfileSelect('/Alma_pfp.png')}
-                className={`p-4 border-2 rounded-lg hover:bg-gray-50 transition ${
-                  selectedProfilePic === '/Alma_pfp.png' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                }`}
-              >
-                <img 
-                  src="/Alma_pfp.png" 
-                  alt="Alma Profile" 
-                  className="w-full h-auto rounded-lg mb-2"
-                />
-                <p className="text-sm font-medium text-center">Alma</p>
-              </button>
-              <button
-                onClick={() => handleProfileSelect('/Roaree_pfp.png')}
-                className={`p-4 border-2 rounded-lg hover:bg-gray-50 transition ${
-                  selectedProfilePic === '/Roaree_pfp.png' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                }`}
-              >
-                <img 
-                  src="/Roaree_pfp.png" 
-                  alt="Roaree Profile" 
-                  className="w-full h-auto rounded-lg mb-2"
-                />
-                <p className="text-sm font-medium text-center">Roaree</p>
-              </button>
-            </div>
-            <button
-              onClick={() => setShowProfileSelector(false)}
-              className="mt-4 w-full px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Profile Modal */}
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => {
+          setShowProfileModal(false);
+          setProfileError(null);
+        }}
+        profile={profile}
+        onSave={handleProfileSave}
+        saving={profileLoading}
+        error={profileError}
+        onLogout={handleLogout}
+      />
     </div>
   );
 }
