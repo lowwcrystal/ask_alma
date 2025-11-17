@@ -3,13 +3,13 @@
   "name": "AskAlma - Your AI Academic Advisor",
   "icons": [
     {
-      "src": "Icon.jpeg",
-      "type": "image/jpeg",
+      "src": "Icon.png",
+      "type": "image/png",
       "sizes": "512x512"
     },
     {
-      "src": "Icon.jpeg",
-      "type": "image/jpeg",
+      "src": "Icon.png",
+      "type": "image/png",
       "sizes": "192x192"
     }
   ],

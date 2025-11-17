@@ -1,7 +1,7 @@
 // src/components/AskAlma.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUp, LogOut, Menu, X, MoreVertical, Loader2 } from "lucide-react";
+import { ArrowUp, Menu, X, MoreVertical, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 import { ACADEMIC_YEAR_OPTIONS, SCHOOL_OPTIONS } from "../constants/profile";
@@ -170,7 +170,7 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
       {from === "alma" ? (
         <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
           <img
-            src="/Icon.jpeg"
+            src="/Icon.png"
             alt="AskAlma"
             className="logo-no-bg"
             style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
@@ -836,7 +836,7 @@ export default function AskAlma() {
               <div className="w-full flex items-start">
                 <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                   <img
-                    src="/Icon.jpeg"
+                    src="/Icon.png"
                     alt="AskAlma"
                     className="logo-no-bg"
                     style={{ width: '35px', height: 'auto', objectFit: 'contain' }}

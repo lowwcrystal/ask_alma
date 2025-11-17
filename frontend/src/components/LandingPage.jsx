@@ -308,7 +308,7 @@ export default function LandingPage() {
                       {msg.from === 'alma' ? (
                         <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                           <img
-                            src="/Icon.jpeg"
+                            src="/Icon.png"
                             alt="AskAlma"
                             className="logo-no-bg"
                             style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
