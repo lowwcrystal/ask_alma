@@ -128,6 +128,7 @@ export default function LandingPage() {
   const [typingMessageIndex, setTypingMessageIndex] = useState(null);
   const [displayedText, setDisplayedText] = useState('');
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
   // Set random greeting on mount
   useEffect(() => {
@@ -179,6 +180,9 @@ export default function LandingPage() {
     setMessages(newMessages);
     setShowChat(true);
     setSearchQuery('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '52px';
+    }
     setIsSending(true);
 
     try {
@@ -299,9 +303,10 @@ export default function LandingPage() {
                   };
                   
                   return (
-                    <div key={i} className={`max-w-2xl w-fit flex items-start gap-3 ${msg.from === 'user' ? 'ml-auto flex-row-reverse' : 'self-start'}`}>
-                      {msg.from === 'alma' && (
-                        <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+                    <div key={i} className="w-full flex items-start">
+                      {/* Profile picture for chatbot or spacer for user */}
+                      {msg.from === 'alma' ? (
+                        <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                           <img
                             src="/Icon.png"
                             alt="AskAlma"
@@ -309,49 +314,64 @@ export default function LandingPage() {
                             style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                           />
                         </div>
+                      ) : (
+                        <div className="flex-shrink-0" style={{ width: '47px' }}></div>
                       )}
-                      <div>
-                        <div
-                          className={`px-4 py-2 rounded-3xl ${
-                            msg.from === 'user'
-                              ? 'bg-[#B9D9EB] text-gray-900'
-                              : 'bg-white border shadow-sm'
-                          }`}
-                        >
-                          <div className="whitespace-pre-wrap">
-                            {typingMessageIndex === i && msg.from === 'alma' ? (
-                              <>
-                                <MarkdownText text={displayedText} />
-                                <span className="animate-pulse">|</span>
-                              </>
-                            ) : (
-                              <MarkdownText text={msg.text} />
-                            )}
+                      
+                      {/* Shared message container - both messages use this same container */}
+                      <div className="flex-1 min-w-0">
+                        <div className={`flex flex-col w-full ${msg.from === 'user' ? 'items-end' : 'items-start'}`}>
+                          <div
+                            className={`px-4 py-2 rounded-3xl ${
+                              msg.from === 'user'
+                                ? 'bg-[#B9D9EB] text-gray-900'
+                                : 'bg-white border shadow-sm'
+                            }`}
+                            style={{ 
+                              maxWidth: '100%',
+                              wordWrap: 'break-word',
+                              overflowWrap: 'break-word'
+                            }}
+                          >
+                            <div className="whitespace-pre-wrap break-words">
+                              {typingMessageIndex === i && msg.from === 'alma' ? (
+                                <>
+                                  <MarkdownText text={displayedText} />
+                                  <span className="animate-pulse">|</span>
+                                </>
+                              ) : (
+                                <MarkdownText text={msg.text} />
+                              )}
+                            </div>
                           </div>
+                          {msg.timestamp && (
+                            <p className={`text-xs text-gray-500 mt-1 ${msg.from === 'user' ? 'text-right' : 'text-left'}`}>
+                              {formatTime(msg.timestamp)}
+                            </p>
+                          )}
                         </div>
-                        {msg.timestamp && (
-                          <p className={`text-xs text-gray-500 mt-1 ${msg.from === 'user' ? 'text-right' : 'text-left'}`}>
-                            {formatTime(msg.timestamp)}
-                          </p>
-                        )}
                       </div>
                     </div>
                   );
                 })}
                 {isSending && (
-                  <div className="max-w-2xl w-fit flex items-start gap-3 self-start">
-                    <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+                  <div className="w-full flex items-start">
+                    <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                       <img
-                        src="/Icon.png"
+                        src="/Icon.jpeg"
                         alt="AskAlma"
                         className="logo-no-bg"
                         style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                       />
                     </div>
-                    <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
-                      <div className="flex items-center gap-2">
-                        <ThinkingAnimation />
-                        <span className="text-sm text-gray-600">Thinking...</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col items-start">
+                        <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
+                          <div className="flex items-center gap-2">
+                            <ThinkingAnimation />
+                            <span className="text-sm text-gray-600">Thinking...</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -364,12 +384,17 @@ export default function LandingPage() {
               <div className="max-w-3xl mx-auto flex items-end gap-2">
                 <div className="flex-1 relative">
                   <textarea
+                    ref={textareaRef}
                     placeholder="Message AskAlma..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
-                      e.target.style.height = 'auto';
-                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                      if (e.target.value.trim()) {
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                      } else {
+                        e.target.style.height = '52px';
+                      }
                     }}
                     className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
                     onKeyDown={(e) => {

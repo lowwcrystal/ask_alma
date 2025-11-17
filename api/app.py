@@ -356,6 +356,86 @@ def list_conversations():
         return jsonify({'error': f'Failed to fetch conversations: {str(e)}'}), 500
 
 
+@app.route('/api/conversations/search', methods=['GET'])
+def search_conversations():
+    """
+    Search conversations by title or message content
+    
+    Query Parameters:
+        user_id: Supabase user ID to filter conversations
+        query: Search query string
+    
+    Response:
+    {
+        "conversations": [
+            {
+                "id": "uuid",
+                "title": "What are the core classes?",
+                "updated_at": "2025-01-15T10:30:00",
+                "message_count": 6
+            }
+        ]
+    }
+    """
+    try:
+        user_id = request.args.get('user_id')
+        search_query = request.args.get('query', '').strip()
+        
+        if not user_id:
+            return jsonify({'error': 'user_id is required'}), 400
+        
+        if not search_query:
+            return jsonify({'conversations': []}), 200
+        
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        
+        # Search in both conversation titles and message content
+        # Use ILIKE for case-insensitive search
+        search_pattern = f'%{search_query}%'
+        
+        cur.execute("""
+            SELECT DISTINCT
+                c.id,
+                c.title,
+                c.updated_at,
+                COUNT(m.id) as message_count
+            FROM conversations c
+            LEFT JOIN messages m ON c.id = m.conversation_id
+            WHERE c.user_id = %s
+                AND (
+                    c.title ILIKE %s
+                    OR m.content ILIKE %s
+                )
+            GROUP BY c.id, c.title, c.updated_at
+            ORDER BY c.updated_at DESC
+            LIMIT 50;
+        """, (user_id, search_pattern, search_pattern))
+        
+        conversations = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        # Format for frontend
+        result = [
+            {
+                'id': str(conv['id']),
+                'title': conv['title'] or 'Untitled Conversation',
+                'updated_at': conv['updated_at'].isoformat() if conv['updated_at'] else None,
+                'message_count': conv['message_count']
+            }
+            for conv in conversations
+        ]
+        
+        return jsonify({'conversations': result})
+    
+    except Exception as e:
+        import traceback
+        print(f"Error in /api/conversations/search: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': f'Failed to search conversations: {str(e)}'}), 500
+
+
 @app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
 def delete_conversation(conversation_id):
     """Delete a conversation"""

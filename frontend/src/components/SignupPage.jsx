@@ -96,7 +96,7 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-xl">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-semibold text-gray-800">Create an account</h2>
@@ -115,7 +115,7 @@ export default function SignupPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="col-span-1 md:col-span-2">
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email
+                Email <span className="text-red-500">*</span>
               </label>
               <input
                 id="email"
@@ -123,14 +123,14 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
-                placeholder="uni@columbia.edu"
+                placeholder="name@gmail.com"
                 required
               />
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
+                Password <span className="text-red-500">*</span>
               </label>
               <input
                 id="password"
@@ -145,7 +145,7 @@ export default function SignupPage() {
 
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                Confirm Password
+                Confirm Password <span className="text-red-500">*</span>
               </label>
               <input
                 id="confirmPassword"
@@ -160,46 +160,50 @@ export default function SignupPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="school" className="block text-sm font-medium text-gray-700 mb-2">
-                School
+            <div className="relative z-10">
+              <label htmlFor="school" className="block text-sm font-medium text-gray-700 mb-3">
+                School <span className="text-red-500">*</span>
               </label>
-              <select
-                id="school"
-                value={school}
-                onChange={(e) => setSchool(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 bg-white"
-              >
-                <option value="">Select your school</option>
-                {SCHOOL_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  id="school"
+                  value={school}
+                  onChange={(e) => setSchool(e.target.value)}
+                  className="w-full px-2 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 bg-white relative z-10"
+                >
+                  <option value="" disabled hidden>Select your school</option>
+                  {SCHOOL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label htmlFor="academicYear" className="block text-sm font-medium text-gray-700 mb-2">
-                Academic Year
+            <div className="relative z-10">
+              <label htmlFor="academicYear" className="block text-sm font-medium text-gray-700 mb-3">
+                Academic Year <span className="text-red-500">*</span>
               </label>
-              <select
-                id="academicYear"
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 bg-white"
-              >
-                <option value="">Select your year</option>
-                {ACADEMIC_YEAR_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  id="academicYear"
+                  value={academicYear}
+                  onChange={(e) => setAcademicYear(e.target.value)}
+                  className="w-full px-2 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 bg-white relative z-10"
+                >
+                  <option value="" disabled hidden>Select your year</option>
+                  {ACADEMIC_YEAR_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
               <label htmlFor="major" className="block text-sm font-medium text-gray-700 mb-2">
-                Major
+                Major <span className="text-red-500">*</span>
               </label>
               <input
                 id="major"

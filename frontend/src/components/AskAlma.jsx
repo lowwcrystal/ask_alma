@@ -1,7 +1,7 @@
 // src/components/AskAlma.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUp, LogOut, Menu, X, MoreVertical, Loader2 } from "lucide-react";
+import { ArrowUp, Menu, X, MoreVertical, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
 import { ACADEMIC_YEAR_OPTIONS, SCHOOL_OPTIONS } from "../constants/profile";
@@ -165,13 +165,10 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
   };
 
   return (
-    <div
-      className={`max-w-2xl w-fit flex items-start gap-3 ${
-        from === "alma" ? "self-start" : "ml-auto flex-row-reverse"
-      }`}
-    >
-      {from === "alma" && (
-        <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+    <div className="w-full flex items-start">
+      {/* Profile picture for chatbot or spacer for user */}
+      {from === "alma" ? (
+        <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
           <img
             src="/Icon.png"
             alt="AskAlma"
@@ -181,32 +178,43 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
             decoding="async"
           />
         </div>
+      ) : (
+        <div className="flex-shrink-0" style={{ width: '47px' }}></div>
       )}
-      <div>
-        <div
-          className={`px-4 py-2 rounded-3xl ${
-            from === "alma"
-              ? "bg-white border shadow-sm"
-              : "bg-[#B9D9EB] text-gray-900"
-          }`}
-        >
-          <div className="whitespace-pre-wrap">
-            {from === "alma" && isTyping ? (
-              <TypingText 
-                text={text} 
-                speed={8} 
-                onComplete={() => {}}
-              />
-            ) : (
-              <MarkdownText text={text} />
-            )}
+      
+      {/* Shared message container - both messages use this same container */}
+      <div className="flex-1 min-w-0">
+        <div className={`flex flex-col w-full ${from === "user" ? "items-end" : "items-start"}`}>
+          <div
+            className={`px-4 py-2 rounded-3xl ${
+              from === "alma"
+                ? "bg-white border shadow-sm"
+                : "bg-[#B9D9EB] text-gray-900"
+            }`}
+            style={{ 
+              maxWidth: '100%',
+              wordWrap: 'break-word',
+              overflowWrap: 'break-word'
+            }}
+          >
+            <div className="whitespace-pre-wrap break-words">
+              {from === "alma" && isTyping ? (
+                <TypingText 
+                  text={text} 
+                  speed={8} 
+                  onComplete={() => {}}
+                />
+              ) : (
+                <MarkdownText text={text} />
+              )}
+            </div>
           </div>
+          {timestamp && (
+            <p className={`text-xs text-gray-500 mt-1 ${from === "alma" ? "text-left" : "text-right"}`}>
+              {formatTime(timestamp)}
+            </p>
+          )}
         </div>
-        {timestamp && (
-          <p className={`text-xs text-gray-500 mt-1 ${from === "alma" ? "text-left" : "text-right"}`}>
-            {formatTime(timestamp)}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -242,6 +250,7 @@ export default function AskAlma() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [isProfileModalOpen, setProfileModalOpen] = useState(false);
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -445,6 +454,9 @@ export default function AskAlma() {
     const text = input.trim();
     if (!text || isLoading) return;
     setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '52px';
+    }
     await handleSendQuery(text);
   };
 
@@ -624,7 +636,7 @@ export default function AskAlma() {
   };
 
   return (
-    <div className="flex w-screen h-screen bg-almaGray">
+    <div className="flex w-screen h-screen bg-almaGray overflow-x-hidden">
       {/* Mobile overlay backdrop */}
       {mobileMenuOpen && (
         <div 
@@ -645,7 +657,7 @@ export default function AskAlma() {
         `}>
         <button 
           onClick={startNewChat}
-            className="bg-[#B9D9EB] text-gray-900 font-medium rounded-2xl py-2 mb-4 hover:bg-[#A8CEE1] transition"
+            className="bg-[#B9D9EB] text-gray-900 font-medium rounded-xl py-2 mb-4 hover:bg-[#A8CEE1] transition"
         >
           + New Chat
         </button>
@@ -737,7 +749,7 @@ export default function AskAlma() {
           )}
           </div>
           
-          <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3">
+          <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3 space-y-2">
             <button
               type="button"
               onClick={() => setProfileModalOpen(true)}
@@ -772,16 +784,9 @@ export default function AskAlma() {
       )}
 
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-x-hidden">
         <header className="flex-shrink-0 border-b p-4 md:p-8 flex items-center justify-between bg-white shadow-sm">
           <div className="flex items-center gap-2 md:gap-4">
-            <button
-              onClick={toggleSidebarVisibility}
-              className="hidden md:flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 transition"
-              title={sidebarVisible ? "Hide chat panel" : "Show chat panel"}
-            >
-              <Menu className="w-5 h-5" />
-            </button>
             <img
               src="/AskAlma_Logo.jpg?v=1"
               alt="AskAlma Logo"
@@ -798,27 +803,23 @@ export default function AskAlma() {
             </div>
           </div>
           
-          {/* Desktop logout button */}
+          {/* Hamburger menu - right side */}
           <button
-            onClick={handleLogout}
-            className="hidden md:flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-[#003865] hover:bg-gray-50 rounded-lg transition"
-            title="Log out"
+            onClick={() => {
+              setMobileMenuOpen(!mobileMenuOpen);
+              if (window.innerWidth >= 768) {
+                toggleSidebarVisibility();
+              }
+            }}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+            title="Menu"
           >
-            <LogOut className="w-5 h-5" />
-            <span>Log out</span>
-          </button>
-
-          {/* Mobile hamburger menu */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 hover:bg-gray-100 rounded-lg"
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {(mobileMenuOpen || sidebarVisible) ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
-          <div className="flex flex-col space-y-4">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
+          <div className="flex flex-col space-y-4 px-4 md:px-6">
             {messages.map((msg, i) => (
               <ChatMessage 
                 key={i} 
@@ -832,8 +833,8 @@ export default function AskAlma() {
             
             {/* Loading indicator */}
             {isLoading && (
-              <div className="max-w-2xl w-fit flex items-start gap-3 self-start">
-                <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+              <div className="w-full flex items-start">
+                <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                   <img
                     src="/Icon.png"
                     alt="AskAlma"
@@ -841,10 +842,14 @@ export default function AskAlma() {
                     style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                   />
                 </div>
-                <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
-                  <div className="flex items-center gap-2">
-                <ThinkingAnimation />
-                    <span className="text-sm text-gray-600">Thinking...</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-col items-start">
+                    <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
+                      <div className="flex items-center gap-2">
+                        <ThinkingAnimation />
+                        <span className="text-sm text-gray-600">Thinking...</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -885,13 +890,18 @@ export default function AskAlma() {
           <div className="max-w-5xl mx-auto flex items-end gap-2">
             <div className="flex-1 relative">
               <textarea
+                ref={textareaRef}
                 placeholder="Message AskAlma..."
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value);
-                  e.target.style.height = 'auto';
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                  if (e.target.value.trim()) {
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                  } else {
+                    e.target.style.height = '52px';
+                  }
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -924,6 +934,7 @@ export default function AskAlma() {
         onSave={handleSaveProfile}
         saving={profileSaving}
         error={profileSaveError}
+        onLogout={handleLogout}
       />
 
       {/* Context Menu */}
