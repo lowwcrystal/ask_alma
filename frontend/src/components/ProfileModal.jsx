@@ -241,6 +241,25 @@ export default function ProfileModal({
                     />
                     <span className="text-xs font-medium text-gray-700">Roaree</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileImage('/Millie_pfp.png');
+                      setImagePreview('/Millie_pfp.png');
+                      setImageError(null);
+                    }}
+                    disabled={saving}
+                    className={`flex flex-col items-center p-3 border-2 rounded-lg hover:bg-gray-50 transition ${
+                      imagePreview === '/Millie_pfp.png' ? 'border-[#003865] bg-blue-50' : 'border-gray-200'
+                    }`}
+                  >
+                    <img 
+                      src="/Millie_pfp.png" 
+                      alt="Millie" 
+                      className="w-12 h-12 rounded-full object-cover mb-1"
+                    />
+                    <span className="text-xs font-medium text-gray-700">Millie</span>
+                  </button>
                 </div>
               </div>
 

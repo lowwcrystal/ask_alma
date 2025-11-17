@@ -905,7 +905,9 @@ export default function AskAlma() {
                         
                         {expandedCategories[catIdx] && (
                           <div 
-                            className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border p-2 w-64 sm:w-80 z-20 max-h-96 overflow-y-auto"
+                            className={`absolute top-full mt-2 bg-white rounded-xl shadow-xl border p-2 w-64 sm:w-80 z-20 max-h-96 overflow-y-auto ${
+                              catIdx % 2 === 0 ? 'left-0' : 'right-0 md:left-0'
+                            }`}
                             onMouseLeave={() => setHoveredQuestion(null)}
                           >
                             <div className="space-y-1">
