@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowUp } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
+import { categorizedQuestions } from './askAlmaData';
 
 // Get API URL based on environment
 const getApiUrl = () => {
@@ -40,23 +41,67 @@ function parseMarkdownBold(text) {
   return parts;
 }
 
-// Component to render parsed markdown text
-function MarkdownText({ text }) {
-  const parts = parseMarkdownBold(text);
+// Helper to render a single line with bold formatting
+function renderLineWithFormatting(line, key) {
+  const parts = parseMarkdownBold(line);
   
   if (parts.length === 0) {
-    return <>{text}</>;
+    return line;
   }
   
   return (
-    <>
+    <React.Fragment key={key}>
       {parts.map((part, idx) => (
         part.type === 'bold' ? (
-          <strong key={idx}>{part.content}</strong>
+          <strong key={`${key}-${idx}`}>{part.content}</strong>
         ) : (
-          <React.Fragment key={idx}>{part.content}</React.Fragment>
+          <React.Fragment key={`${key}-${idx}`}>{part.content}</React.Fragment>
         )
       ))}
+    </React.Fragment>
+  );
+}
+
+// Component to render parsed markdown text with proper line breaks and lists
+function MarkdownText({ text }) {
+  if (!text) return null;
+  
+  const lines = text.split('\n');
+  
+  return (
+    <>
+      {lines.map((line, idx) => {
+        // Check if it's a bullet point (starts with - or *)
+        if (line.trim().match(/^[-*]\s+/)) {
+          return (
+            <div key={idx} className="flex gap-2 my-1">
+              <span>•</span>
+              <span>{renderLineWithFormatting(line.trim().replace(/^[-*]\s+/, ''), `line-${idx}`)}</span>
+            </div>
+          );
+        }
+        
+        // Check if it's a numbered list (starts with number.)
+        if (line.trim().match(/^\d+\.\s+/)) {
+          const match = line.trim().match(/^(\d+)\.\s+(.*)/);
+          if (match) {
+            return (
+              <div key={idx} className="flex gap-2 my-1">
+                <span>{match[1]}.</span>
+                <span>{renderLineWithFormatting(match[2], `line-${idx}`)}</span>
+              </div>
+            );
+          }
+        }
+        
+        // Regular line - add line break if not the last line
+        return (
+          <React.Fragment key={idx}>
+            {renderLineWithFormatting(line, `line-${idx}`)}
+            {idx < lines.length - 1 && <br />}
+          </React.Fragment>
+        );
+      })}
     </>
   );
 }
@@ -107,18 +152,8 @@ const greetings = [
   "Ready to explore?",
 ];
 
-const placeholders = [
-  "Ask for course suggestions",
-  "Ask for first year requirements",
-  "Ask about registration",
-  "Ask about the Core Curriculum",
-  "Ask about prerequisites",
-  "Ask about academic advisors",
-];
-
 export default function LandingPage() {
   const [greeting, setGreeting] = useState('');
-  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [messages, setMessages] = useState([]);
   const [showChat, setShowChat] = useState(false);
@@ -128,7 +163,8 @@ export default function LandingPage() {
   const [typingMessageIndex, setTypingMessageIndex] = useState(null);
   const [displayedText, setDisplayedText] = useState('');
   const messagesEndRef = useRef(null);
-  const textareaRef = useRef(null);
+  const [expandedCategories, setExpandedCategories] = useState({});
+  const [hoveredQuestion, setHoveredQuestion] = useState(null);
 
   // Set random greeting on mount
   useEffect(() => {
@@ -136,15 +172,22 @@ export default function LandingPage() {
     setGreeting(randomGreeting);
   }, []);
 
-  // Cycle through placeholders (only when not in chat mode)
+  // Close category dropdowns when clicking outside
   useEffect(() => {
-    if (showChat) return;
-    const interval = setInterval(() => {
-      setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
-    }, 3000); // Change every 3 seconds
+    const handleClickOutside = (e) => {
+      // Check if any category is expanded
+      if (Object.keys(expandedCategories).length > 0) {
+        // Close dropdowns if click is outside the dropdown container
+        const isClickInsideDropdown = e.target.closest('.category-dropdown-container');
+        if (!isClickInsideDropdown) {
+          setExpandedCategories({});
+        }
+      }
+    };
 
-    return () => clearInterval(interval);
-  }, [showChat]);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [expandedCategories]);
 
   // Typewriter effect for AI responses
   useEffect(() => {
@@ -170,19 +213,15 @@ export default function LandingPage() {
     return () => clearInterval(typingInterval);
   }, [typingMessageIndex, messages]);
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim() || isSending) return;
+  const handleSendQuery = async (queryText) => {
+    if (!queryText.trim() || isSending) return;
     
-    const userMessage = searchQuery.trim();
+    const userMessage = queryText.trim();
     const now = new Date().toISOString();
     const newMessages = [...messages, { from: 'user', text: userMessage, timestamp: now }];
     setMessages(newMessages);
     setShowChat(true);
     setSearchQuery('');
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '52px';
-    }
     setIsSending(true);
 
     try {
@@ -226,6 +265,11 @@ export default function LandingPage() {
     }
   };
 
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    await handleSendQuery(searchQuery);
+  };
+
   return (
     <div className="h-screen bg-almaGray flex flex-col overflow-hidden">
       {/* Header */}
@@ -262,32 +306,116 @@ export default function LandingPage() {
         {!showChat ? (
           // Initial centered view
           <div className="flex-1 flex items-center justify-center px-6">
-            <div className="w-full max-w-3xl">
+            <div className="w-full max-w-5xl">
               {/* Greeting */}
-              <h2 className="text-4xl md:text-4xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-12">
+              <h2 className="text-4xl md:text-5xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-8 pb-2" style={{ lineHeight: '1.3' }}>
                 {greeting}
               </h2>
 
-              {/* Search Bar */}
-              <form onSubmit={handleSearch} className="relative">
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={placeholders[placeholderIndex]}
-                    className="w-full px-6 py-4 pr-14 text-lg bg-white text-gray-900 placeholder-gray-400 border-0 rounded-full focus:outline-none focus:ring-0 shadow-lg transition-all peer"
+              {/* Extended Search Box Container */}
+              <div className="bg-white rounded-3xl shadow-lg p-6 w-full mx-auto">
+                {/* Search Input */}
+                <div className="relative mb-4">
+                  <textarea
+                    placeholder="Ask me anything about Columbia..."
+                    className={`w-full px-6 py-4 pr-14 text-lg bg-gray-50 border-0 rounded-2xl focus:outline-none resize-none ${
+                      hoveredQuestion && !searchQuery ? 'text-gray-400' : 'text-gray-900'
+                    } placeholder-gray-400`}
                     style={{ outline: 'none' }}
+                    value={hoveredQuestion && !searchQuery ? hoveredQuestion : searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSearch(e);
+                      }
+                    }}
+                    rows={1}
                   />
                   <button
-                    type="submit"
-                    className="absolute right-3 p-2 rounded-full transition-all text-[#003865] peer-focus:bg-[#003865] peer-focus:text-white hover:opacity-70"
-                    aria-label="Search"
+                    onClick={handleSearch}
+                    disabled={isSending || !searchQuery.trim()}
+                    className={`absolute right-3 top-[50%] -translate-y-1/2 p-2 rounded-full transition ${
+                      isSending || !searchQuery.trim()
+                        ? "bg-gray-300 cursor-not-allowed"
+                        : "bg-[#003865] text-white hover:bg-[#002d4f]"
+                    }`}
                   >
-                    <Search className="w-5 h-5" />
+                    <ArrowUp className="w-5 h-5" />
                   </button>
                 </div>
-              </form>
+
+                {/* Category Dropdowns - Horizontal Layout */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 category-dropdown-container">
+                  {categorizedQuestions.map((category, catIdx) => {
+                    // Map category name to icon filename
+                    const iconName = category.category.replace(/\s+/g, '_');
+                    const iconPath = `/dropdown_icons/${iconName}.png`;
+                    
+                    return (
+                      <div key={catIdx} className="relative">
+                        <button
+                          onClick={() => {
+                            setExpandedCategories(prev => {
+                              // If this category is already open, close it
+                              if (prev[catIdx]) {
+                                return {};
+                              }
+                              // Otherwise, close all and open only this one
+                              return { [catIdx]: true };
+                            });
+                          }}
+                          className="w-full px-3 py-3 flex items-center justify-center gap-1 bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200"
+                        >
+                          <img 
+                            src={iconPath} 
+                            alt={category.category} 
+                            className="w-6 h-6 flex-shrink-0 object-contain"
+                          />
+                          <span className="font-semibold text-[#003865] text-sm whitespace-nowrap">{category.category}</span>
+                          <svg 
+                            className={`w-3 h-3 flex-shrink-0 transition-transform ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      
+                      {expandedCategories[catIdx] && (
+                        <div 
+                          className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border p-2 w-80 z-20 max-h-96 overflow-y-auto"
+                          onMouseLeave={() => setHoveredQuestion(null)}
+                        >
+                          <div className="space-y-1">
+                            {category.questions.map((question, qIdx) => (
+                              <button
+                                key={qIdx}
+                                onClick={() => {
+                                  handleSendQuery(question);
+                                  setExpandedCategories({});
+                                  setHoveredQuestion(null);
+                                }}
+                                onMouseEnter={() => setHoveredQuestion(question)}
+                                onMouseLeave={() => setHoveredQuestion(null)}
+                                className="w-full text-left text-xs hover:bg-[#B9D9EB] rounded-lg px-3 py-2 transition"
+                              >
+                                {question}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         ) : (
@@ -302,11 +430,11 @@ export default function LandingPage() {
                     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
                   };
                   
-                  return (
-                    <div key={i} className="w-full flex items-start">
-                      {/* Profile picture for chatbot or spacer for user */}
-                      {msg.from === 'alma' ? (
-                        <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+                  // Alma message with bubble
+                  if (msg.from === 'alma') {
+                    return (
+                      <div key={i} className="flex items-start gap-3 w-full max-w-2xl">
+                        <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                           <img
                             src="/Icon.png"
                             alt="AskAlma"
@@ -314,27 +442,10 @@ export default function LandingPage() {
                             style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                           />
                         </div>
-                      ) : (
-                        <div className="flex-shrink-0" style={{ width: '47px' }}></div>
-                      )}
-                      
-                      {/* Shared message container - both messages use this same container */}
-                      <div className="flex-1 min-w-0">
-                        <div className={`flex flex-col w-full ${msg.from === 'user' ? 'items-end' : 'items-start'}`}>
-                          <div
-                            className={`px-4 py-2 rounded-3xl ${
-                              msg.from === 'user'
-                                ? 'bg-[#B9D9EB] text-gray-900'
-                                : 'bg-white border shadow-sm'
-                            }`}
-                            style={{ 
-                              maxWidth: '100%',
-                              wordWrap: 'break-word',
-                              overflowWrap: 'break-word'
-                            }}
-                          >
-                            <div className="whitespace-pre-wrap break-words">
-                              {typingMessageIndex === i && msg.from === 'alma' ? (
+                        <div>
+                          <div className="px-4 py-2 rounded-3xl bg-white border shadow-sm">
+                            <div className="whitespace-pre-wrap">
+                              {typingMessageIndex === i ? (
                                 <>
                                   <MarkdownText text={displayedText} />
                                   <span className="animate-pulse">|</span>
@@ -345,33 +456,47 @@ export default function LandingPage() {
                             </div>
                           </div>
                           {msg.timestamp && (
-                            <p className={`text-xs text-gray-500 mt-1 ${msg.from === 'user' ? 'text-right' : 'text-left'}`}>
+                            <p className="text-xs text-gray-500 mt-1">
                               {formatTime(msg.timestamp)}
                             </p>
                           )}
                         </div>
                       </div>
+                    );
+                  }
+                  
+                  // User message: keep bubble style
+                  return (
+                    <div key={i} className="flex items-start gap-3 ml-auto flex-row-reverse max-w-2xl w-fit">
+                      <div>
+                        <div className="px-4 py-2 rounded-3xl bg-[#B9D9EB] text-gray-900">
+                          <div className="whitespace-pre-wrap">
+                            <MarkdownText text={msg.text} />
+                          </div>
+                        </div>
+                        {msg.timestamp && (
+                          <p className="text-xs text-gray-500 mt-1 text-right">
+                            {formatTime(msg.timestamp)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
                 {isSending && (
-                  <div className="w-full flex items-start">
-                    <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+                  <div className="flex items-start gap-3 w-full max-w-2xl">
+                    <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                       <img
-                        src="/Icon.jpeg"
+                        src="/Icon.png"
                         alt="AskAlma"
                         className="logo-no-bg"
                         style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                       />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-col items-start">
-                        <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
-                          <div className="flex items-center gap-2">
-                            <ThinkingAnimation />
-                            <span className="text-sm text-gray-600">Thinking...</span>
-                          </div>
-                        </div>
+                    <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
+                      <div className="flex items-center gap-2">
+                        <ThinkingAnimation />
+                        <span className="text-sm text-gray-600">Thinking...</span>
                       </div>
                     </div>
                   </div>
@@ -384,17 +509,12 @@ export default function LandingPage() {
               <div className="max-w-3xl mx-auto flex items-end gap-2">
                 <div className="flex-1 relative">
                   <textarea
-                    ref={textareaRef}
                     placeholder="Message AskAlma..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
-                      if (e.target.value.trim()) {
-                        e.target.style.height = 'auto';
-                        e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
-                      } else {
-                        e.target.style.height = '52px';
-                      }
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
                     }}
                     className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
                     onKeyDown={(e) => {

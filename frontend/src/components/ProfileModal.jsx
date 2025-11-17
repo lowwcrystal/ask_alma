@@ -161,49 +161,98 @@ export default function ProfileModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Profile photo
             </label>
-            <div className="flex items-center gap-4">
-              {imagePreview ? (
-                <img
-                  src={imagePreview}
-                  alt="Profile preview"
-                  className="w-16 h-16 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">
-                  No photo
-                </div>
-              )}
-              <div className="flex flex-col sm:flex-row gap-2">
-                <label className="inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-[#003865] border border-[#003865] rounded-lg cursor-pointer hover:bg-[#003865] hover:text-white transition">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageChange}
-                    disabled={saving}
+            <div className="flex flex-col gap-4">
+              {/* Current Photo Preview */}
+              <div className="flex items-center gap-4">
+                {imagePreview ? (
+                  <img
+                    src={imagePreview}
+                    alt="Profile preview"
+                    className="w-16 h-16 rounded-full object-cover border"
                   />
-                  {imagePreview ? 'Change photo' : 'Upload photo'}
-                </label>
-                {imagePreview && (
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm border">
+                    No photo
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <label className="inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-[#003865] border border-[#003865] rounded-lg cursor-pointer hover:bg-[#003865] hover:text-white transition">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageChange}
+                      disabled={saving}
+                    />
+                    {imagePreview ? 'Change photo' : 'Upload photo'}
+                  </label>
+                  {imagePreview && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 rounded-lg border border-transparent hover:border-gray-300 transition"
+                      disabled={saving}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Preset Options */}
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Or choose a preset:</p>
+                <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={handleRemoveImage}
-                    className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 rounded-lg border border-transparent hover:border-gray-300 transition"
+                    onClick={() => {
+                      setProfileImage('/Alma_pfp.png');
+                      setImagePreview('/Alma_pfp.png');
+                      setImageError(null);
+                    }}
                     disabled={saving}
+                    className={`flex flex-col items-center p-3 border-2 rounded-lg hover:bg-gray-50 transition ${
+                      imagePreview === '/Alma_pfp.png' ? 'border-[#003865] bg-blue-50' : 'border-gray-200'
+                    }`}
                   >
-                    Remove
+                    <img 
+                      src="/Alma_pfp.png" 
+                      alt="Alma" 
+                      className="w-12 h-12 rounded-full object-cover mb-1"
+                    />
+                    <span className="text-xs font-medium text-gray-700">Alma</span>
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileImage('/Roaree_pfp.png');
+                      setImagePreview('/Roaree_pfp.png');
+                      setImageError(null);
+                    }}
+                    disabled={saving}
+                    className={`flex flex-col items-center p-3 border-2 rounded-lg hover:bg-gray-50 transition ${
+                      imagePreview === '/Roaree_pfp.png' ? 'border-[#003865] bg-blue-50' : 'border-gray-200'
+                    }`}
+                  >
+                    <img 
+                      src="/Roaree_pfp.png" 
+                      alt="Roaree" 
+                      className="w-12 h-12 rounded-full object-cover mb-1"
+                    />
+                    <span className="text-xs font-medium text-gray-700">Roaree</span>
+                  </button>
+                </div>
               </div>
-            </div>
-            <p className="mt-2 text-xs text-gray-500">
-              Square images (e.g. 400×400) look best. PNG or JPG up to 5MB.
-            </p>
-            {imageError && (
-              <p className="mt-1 text-xs text-red-500">
-                {imageError}
+
+              <p className="text-xs text-gray-500">
+                Upload your own photo (PNG or JPG up to 5MB) or choose a preset.
               </p>
-            )}
+              {imageError && (
+                <p className="text-xs text-red-500">
+                  {imageError}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
