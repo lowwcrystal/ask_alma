@@ -113,14 +113,21 @@ def get_user_profile(conn, user_id: Optional[str]) -> Optional[Dict[str, Any]]:
             WHERE user_id = %s;
         """, (user_id,))
         profile = cur.fetchone()
+        
+        # If no profile found, return None
+        if not profile:
+            return None
+            
         # Ensure we return a dict (RealDictCursor should handle this, but be safe)
-        if profile and not isinstance(profile, dict):
+        if not isinstance(profile, dict):
             # Convert tuple to dict if needed
             columns = ['school', 'academic_year', 'major', 'minors', 'classes_taken', 'profile_image']
             profile = dict(zip(columns, profile))
         return profile
     except Exception as e:
         print(f"Error fetching user profile for {user_id}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
     finally:
         cur.close()
@@ -398,7 +405,15 @@ def rag_answer(
     """
     # Connect to database
     conn = get_pg_conn()
-    profile = get_user_profile(conn, user_id)
+    
+    # Fetch user profile (with error handling)
+    profile = None
+    try:
+        profile = get_user_profile(conn, user_id) if user_id else None
+    except Exception as e:
+        print(f"Warning: Could not fetch user profile: {e}")
+        profile = None
+    
     profile_summary = format_profile_summary(profile) if profile else None
     
     # 1) Handle conversation
@@ -427,7 +442,11 @@ def rag_answer(
     vec_literal = "[" + ",".join(f"{x:.8f}" for x in q_vec) + "]"
 
     rows = []
-    school_filter = get_school_source_filter(profile.get("school") if profile else None)
+    # Get school filter safely
+    school_value = None
+    if profile and isinstance(profile, dict):
+        school_value = profile.get("school")
+    school_filter = get_school_source_filter(school_value)
     
     # Step 1: Get school-specific results first (if school filter exists)
     if school_filter:
@@ -532,7 +551,7 @@ def rag_answer(
         }
         if profile_summary:
             metadata["student_profile_summary"] = profile_summary
-        if school_filter and filtered_rows:
+        if school_filter and rows:
             metadata["school_filter_applied"] = school_filter
         save_message(conn, conversation_id, "assistant", answer, metadata)
     

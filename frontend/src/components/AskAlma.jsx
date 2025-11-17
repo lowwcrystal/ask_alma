@@ -824,17 +824,17 @@ export default function AskAlma() {
             <div className="flex-1 flex items-center justify-center px-6">
               <div className="w-full max-w-5xl">
                 {/* Greeting */}
-                <h2 className="text-4xl md:text-5xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-8 pb-2" style={{ lineHeight: '1.3' }}>
+                <h2 className="text-2xl sm:text-3xl md:text-5xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-4 md:mb-8 pb-2" style={{ lineHeight: '1.3' }}>
                   {greeting}
                 </h2>
 
                 {/* Extended Search Box Container */}
-                <div className="bg-white rounded-3xl shadow-lg p-6 w-full mx-auto">
+                <div className="bg-white rounded-3xl shadow-lg p-3 sm:p-4 md:p-6 w-full mx-auto">
                   {/* Search Input */}
-                  <div className="relative mb-4">
+                  <div className="relative mb-3 md:mb-4">
                     <textarea
                       placeholder="Ask me anything about Columbia..."
-                      className={`w-full px-6 py-4 pr-14 text-lg bg-gray-50 border-0 rounded-2xl focus:outline-none resize-none ${
+                      className={`w-full px-3 py-3 pr-12 sm:px-4 sm:py-3 md:px-6 md:py-4 md:pr-14 text-sm sm:text-base md:text-lg bg-gray-50 border-0 rounded-2xl focus:outline-none resize-none ${
                         hoveredQuestion && !input ? 'text-gray-400' : 'text-gray-900'
                       } placeholder-gray-400`}
                       style={{ outline: 'none' }}
@@ -855,25 +855,25 @@ export default function AskAlma() {
                     <button
                       onClick={handleSend}
                       disabled={isLoading || !input.trim()}
-                      className={`absolute right-3 top-[50%] -translate-y-1/2 p-2 rounded-full transition ${
+                      className={`absolute right-2 sm:right-3 top-[50%] -translate-y-1/2 p-1.5 sm:p-2 rounded-full transition ${
                         isLoading || !input.trim()
                           ? "bg-gray-300 cursor-not-allowed"
                           : "bg-[#003865] text-white hover:bg-[#002d4f]"
                       }`}
                     >
-                      <ArrowUp className="w-5 h-5" />
+                      <ArrowUp className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                   </div>
 
                   {/* Category Dropdowns - Horizontal Layout */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 category-dropdown-container">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3 category-dropdown-container">
                     {categorizedQuestions.map((category, catIdx) => {
                       // Map category name to icon filename
                       const iconName = category.category.replace(/\s+/g, '_');
                       const iconPath = `/dropdown_icons/${iconName}.png`;
                       
                       return (
-                        <div key={catIdx} className="relative">
+                        <div key={catIdx} className={`relative ${catIdx === 4 ? 'col-span-2 md:col-span-1' : ''}`}>
                         <button
                           onClick={() => {
                             setExpandedCategories(prev => {
@@ -885,16 +885,16 @@ export default function AskAlma() {
                               return { [catIdx]: true };
                             });
                           }}
-                          className="w-full px-3 py-3 flex items-center justify-center gap-1 bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200"
+                          className={`w-full px-2 py-2 md:px-3 md:py-3 flex flex-col md:flex-row items-center justify-center gap-1 bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200 ${catIdx === 4 ? 'max-w-[50%] md:max-w-none mx-auto' : ''}`}
                         >
                           <img 
                             src={iconPath} 
                             alt={category.category} 
-                            className="w-6 h-6 flex-shrink-0 object-contain"
+                            className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0 object-contain"
                           />
-                          <span className="font-semibold text-[#003865] text-sm whitespace-nowrap">{category.category}</span>
+                          <span className="font-semibold text-[#003865] text-[10px] sm:text-xs md:text-sm text-center leading-tight">{category.category}</span>
                           <svg 
-                            className={`w-3 h-3 flex-shrink-0 transition-transform ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
+                            className={`w-3 h-3 flex-shrink-0 transition-transform hidden md:block ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
                             fill="none" 
                             stroke="currentColor" 
                             viewBox="0 0 24 24"
@@ -905,7 +905,7 @@ export default function AskAlma() {
                         
                         {expandedCategories[catIdx] && (
                           <div 
-                            className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border p-2 w-80 z-20 max-h-96 overflow-y-auto"
+                            className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border p-2 w-64 sm:w-80 z-20 max-h-96 overflow-y-auto"
                             onMouseLeave={() => setHoveredQuestion(null)}
                           >
                             <div className="space-y-1">
