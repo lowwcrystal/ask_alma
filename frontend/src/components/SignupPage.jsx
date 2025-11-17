@@ -254,7 +254,7 @@ export default function SignupPage() {
               onChange={(e) => setClassesTaken(e.target.value)}
               rows={4}
               className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
-              placeholder="List classes separated by commas or new lines, e.g. 'COMS 3134, ECON 1105'"
+              placeholder="List classes separated by commas or new lines, e.g. 'COMS 3134, Principles of Economics'"
             />
             <p className="mt-1 text-xs text-gray-500">
               This helps AskAlma avoid recommending courses you’ve already completed.
