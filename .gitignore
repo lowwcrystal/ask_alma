@@ -40,3 +40,17 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+
+# Large data files (too large for git/Vercel)
+*.jsonl
+*_2024_2025.json
+*_2026.json
+chunked_*.jsonl
+*_summary.txt
+!package.json
+!package-lock.json
+!vercel.json
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/public/manifest.json
+!frontend/build/**/*.json
