@@ -61,17 +61,35 @@ def _serialize_profile(row):
     """Convert database row into JSON-friendly profile payload."""
     if not row:
         return None
-    return {
-        'user_id': row.get('user_id'),
-        'school': row.get('school'),
-        'academic_year': row.get('academic_year'),
-        'major': row.get('major'),
-        'minors': row.get('minors') or [],
-        'classes_taken': row.get('classes_taken') or [],
-        'profile_image': row.get('profile_image'),
-        'created_at': row.get('created_at').isoformat() if row.get('created_at') else None,
-        'updated_at': row.get('updated_at').isoformat() if row.get('updated_at') else None,
-    }
+    
+    # Handle both dict (RealDictCursor) and tuple (regular cursor) formats
+    if isinstance(row, dict):
+        return {
+            'user_id': row.get('user_id'),
+            'school': row.get('school'),
+            'academic_year': row.get('academic_year'),
+            'major': row.get('major'),
+            'minors': row.get('minors') or [],
+            'classes_taken': row.get('classes_taken') or [],
+            'profile_image': row.get('profile_image'),
+            'created_at': row.get('created_at').isoformat() if row.get('created_at') else None,
+            'updated_at': row.get('updated_at').isoformat() if row.get('updated_at') else None,
+        }
+    else:
+        # Handle tuple format
+        columns = ['user_id', 'school', 'academic_year', 'major', 'minors', 'classes_taken', 'profile_image', 'created_at', 'updated_at']
+        row_dict = dict(zip(columns, row))
+        return {
+            'user_id': row_dict.get('user_id'),
+            'school': row_dict.get('school'),
+            'academic_year': row_dict.get('academic_year'),
+            'major': row_dict.get('major'),
+            'minors': row_dict.get('minors') or [],
+            'classes_taken': row_dict.get('classes_taken') or [],
+            'profile_image': row_dict.get('profile_image'),
+            'created_at': row_dict.get('created_at').isoformat() if row_dict.get('created_at') else None,
+            'updated_at': row_dict.get('updated_at').isoformat() if row_dict.get('updated_at') else None,
+        }
 
 
 @app.route('/api/health', methods=['GET'])
@@ -144,8 +162,11 @@ def chat():
         return jsonify(response)
     
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
         print(f"Error in /api/chat: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"Full traceback:\n{error_trace}")
+        return jsonify({'error': str(e), 'traceback': error_trace}), 500
 
 
 @app.route('/api/conversations/<conversation_id>', methods=['GET'])
@@ -221,11 +242,18 @@ def get_user_profile(user_id):
         if not row:
             return jsonify({'error': 'Profile not found'}), 404
 
-        return jsonify(_serialize_profile(row))
+        serialized = _serialize_profile(row)
+        if not serialized:
+            return jsonify({'error': 'Failed to serialize profile'}), 500
+
+        return jsonify(serialized)
 
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
         print(f"Error fetching profile for user_id={user_id}: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"Traceback: {error_trace}")
+        return jsonify({'error': str(e), 'traceback': error_trace}), 500
 
 
 @app.route('/api/profile', methods=['POST', 'PUT'])

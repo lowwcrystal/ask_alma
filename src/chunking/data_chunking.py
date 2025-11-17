@@ -7,16 +7,17 @@ import hashlib
 nltk.download('punkt', quiet=True)
 from nltk.tokenize import sent_tokenize
 
-def sentence_chunk_text(text, max_chars=300, overlap_chars=50):
+def sentence_chunk_text(text, min_chars=2000, max_chars=3000, overlap_chars=200):
     """
-    Split text into chunks <= max_chars with overlap between consecutive chunks.
+    Split text into chunks with min_chars <= chunk <= max_chars with overlap between consecutive chunks.
     Tries to keep sentences intact, but splits long sentences on punctuation or
-    forcibly at max_chars if needed.
+    forcibly at max_chars if needed. Ensures chunks are at least min_chars.
     
     Args:
         text: Text to chunk
-        max_chars: Maximum characters per chunk
-        overlap_chars: Number of characters to overlap between consecutive chunks
+        min_chars: Minimum characters per chunk (default 2000)
+        max_chars: Maximum characters per chunk (default 3000)
+        overlap_chars: Number of characters to overlap between consecutive chunks (default 200)
     """
     import re
     # use nltk to split sentences semantically
@@ -32,6 +33,7 @@ def sentence_chunk_text(text, max_chars=300, overlap_chars=50):
             if not part:
                 continue
                 
+            # If a single part is longer than max_chars, split it
             while len(part) > max_chars:
                 # Hard split if part is too long
                 chunks.append(part[:max_chars])
@@ -42,11 +44,11 @@ def sentence_chunk_text(text, max_chars=300, overlap_chars=50):
             
             # Append to current chunk if it fits
             test_current = current + (" " + part if current else part)
-            if len(test_current) <= max_chars:
-                current = test_current
-            else:
-                # Save current chunk
-                if current:
+            
+            # If adding this part would exceed max_chars, save current chunk
+            if len(test_current) > max_chars:
+                # Only save if current chunk meets minimum size
+                if current and len(current.strip()) >= min_chars:
                     chunks.append(current.strip())
                     # Build overlap buffer from the end of current chunk
                     if len(current) >= overlap_chars:
@@ -58,20 +60,34 @@ def sentence_chunk_text(text, max_chars=300, overlap_chars=50):
                         overlap_buffer = [overlap_text] if overlap_text else []
                     else:
                         overlap_buffer = [current.strip()] if current.strip() else []
-                
-                # Start new chunk with overlap from previous chunk
-                if overlap_buffer:
-                    overlap_str = " ".join(overlap_buffer)
-                    current = overlap_str + " " + part if overlap_str else part
+                    
+                    # Start new chunk with overlap from previous chunk
+                    if overlap_buffer:
+                        overlap_str = " ".join(overlap_buffer)
+                        current = overlap_str + " " + part if overlap_str else part
+                    else:
+                        current = part
                 else:
-                    current = part
+                    # Current chunk is too small, keep adding to it
+                    current = test_current
+            else:
+                current = test_current
 
-    if current:
+    # Save final chunk if it meets minimum size
+    if current and len(current.strip()) >= min_chars:
         chunks.append(current.strip())
+    elif current:
+        # If final chunk is too small, append it to the last chunk if possible
+        if chunks:
+            chunks[-1] = chunks[-1] + " " + current.strip()
+        else:
+            # If it's the only chunk and too small, include it anyway
+            chunks.append(current.strip())
+    
     return chunks
 
 
-def process_jsonl_files(filenames, max_chars=300, overlap_chars=50):
+def process_jsonl_files(filenames, min_chars=2000, max_chars=3000, overlap_chars=200):
     """
     Read JSONL files and split page_content into sentence-based chunks with overlap.
     Returns a list of dictionaries containing source, page_index, chunk_id, and text.
@@ -79,8 +95,9 @@ def process_jsonl_files(filenames, max_chars=300, overlap_chars=50):
     
     Args:
         filenames: List of JSONL file paths
-        max_chars: Maximum characters per chunk
-        overlap_chars: Number of characters to overlap between consecutive chunks
+        min_chars: Minimum characters per chunk (default 2000)
+        max_chars: Maximum characters per chunk (default 3000)
+        overlap_chars: Number of characters to overlap between consecutive chunks (default 200)
     """
     data = []
     seen_chunks = set()  # Track unique chunks by hash
@@ -96,7 +113,7 @@ def process_jsonl_files(filenames, max_chars=300, overlap_chars=50):
             source = entry["source"]
             page_index = entry["page_index"]
 
-            for i, chunk in enumerate(sentence_chunk_text(text, max_chars=max_chars, overlap_chars=overlap_chars)):
+            for i, chunk in enumerate(sentence_chunk_text(text, min_chars=min_chars, max_chars=max_chars, overlap_chars=overlap_chars)):
                 # Normalize chunk for comparison (strip whitespace, lowercase)
                 normalized_chunk = chunk.strip().lower()
                 
@@ -121,18 +138,26 @@ def process_jsonl_files(filenames, max_chars=300, overlap_chars=50):
     return data
 
 
-# Example files
+# All files to process (2024-2025 and 2026)
 filenames = [
+    "barnard_2024_2025.jsonl",
+    "columbia_engineering_2024_2025.jsonl",
+    "columbia_college_2024_2025.jsonl",
     "seas_2026.jsonl",
-    "barnard_2026.jsonl"
+    "barnard_2026.jsonl",
+    "columbia_college_2026.jsonl"
 ]
 
-# Process files into chunks with 50 character overlap
-chunked_data = process_jsonl_files(filenames, max_chars=300, overlap_chars=50)
+# Process files into chunks with at least 2000 characters, max 3000, with 200 character overlap
+print("Starting chunking process...")
+print(f"Chunk size: minimum {2000} chars, maximum {3000} chars, overlap {200} chars")
+chunked_data = process_jsonl_files(filenames, min_chars=2000, max_chars=3000, overlap_chars=200)
 
 # Save the chunks to a new JSONL file for embeddings
-with open("chunked_bulletins.jsonl", "w", encoding="utf-8") as f:
+output_file = "chunked_all_bulletins.jsonl"
+with open(output_file, "w", encoding="utf-8") as f:
     for record in chunked_data:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-print(f"Saved {len(chunked_data)} chunks to chunked_bulletins.jsonl")
+print(f"\n✓ Saved {len(chunked_data)} chunks to {output_file}")
+print(f"  Average chunk size: {sum(len(c['text']) for c in chunked_data) / len(chunked_data):.0f} characters")

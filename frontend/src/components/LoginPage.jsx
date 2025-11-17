@@ -99,6 +99,8 @@ export default function LoginPage() {
             {loading ? 'Logging in...' : 'Log in'}
           </button>
 
+          
+
           <button
             type="button"
             onClick={handleGoogleSignIn}

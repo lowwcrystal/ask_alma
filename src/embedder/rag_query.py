@@ -106,14 +106,24 @@ def get_user_profile(conn, user_id: Optional[str]) -> Optional[Dict[str, Any]]:
     if not user_id:
         return None
     cur = conn.cursor()
-    cur.execute("""
-        SELECT school, academic_year, major, minors, classes_taken, profile_image
-        FROM user_profiles
-        WHERE user_id = %s;
-    """, (user_id,))
-    profile = cur.fetchone()
-    cur.close()
-    return profile
+    try:
+        cur.execute("""
+            SELECT school, academic_year, major, minors, classes_taken, profile_image
+            FROM user_profiles
+            WHERE user_id = %s;
+        """, (user_id,))
+        profile = cur.fetchone()
+        # Ensure we return a dict (RealDictCursor should handle this, but be safe)
+        if profile and not isinstance(profile, dict):
+            # Convert tuple to dict if needed
+            columns = ['school', 'academic_year', 'major', 'minors', 'classes_taken', 'profile_image']
+            profile = dict(zip(columns, profile))
+        return profile
+    except Exception as e:
+        print(f"Error fetching user profile for {user_id}: {e}")
+        return None
+    finally:
+        cur.close()
 
 
 def get_conversation_history(conn, conversation_id: str, limit: int = MAX_HISTORY_MESSAGES) -> List[Dict[str, Any]]:
@@ -211,7 +221,9 @@ def build_prompt(
     - Registration policies and procedures
     - Academic deadlines and timelines
     
-    Be conversational, friendly, and supportive while maintaining accuracy. Always base your answers on the CONTEXT provided below.{profile_text}
+    Be conversational, friendly, and supportive while maintaining accuracy. Always base your answers on the CONTEXT provided below.
+    
+    **IMPORTANT FOR SCHOOL-SPECIFIC QUESTIONS**: When a student's profile indicates a specific school (Barnard, Columbia College, SEAS), prioritize and search for information relevant to that school. Look for school-specific requirements, terminology, and course listings in the context.{profile_text}
     
     ## WHEN TO USE CHAT HISTORY:
     **IMPORTANT**: Only reference chat history when the current question is DIRECTLY RELATED to previous conversation.
@@ -315,10 +327,17 @@ def build_prompt(
     
     ## ACCURACY & VERIFICATION:
     - Base ALL answers on the CONTEXT provided below
-    - If information is missing: "I don't see information about [X] in the course bulletins"
+      - Related requirements or categories that might contain the information
+      - School-specific terminology (Barnard, Columbia College, SEAS may use different terms)
+    - **SCHOOL-SPECIFIC PRIORITY**: If the student's profile indicates a specific school (Barnard, Columbia College, SEAS):
+      - Prioritize information from that school's sources in the context
+      - Use school-specific terminology and requirements
+      - If information exists in the context but isn't explicitly labeled, infer from school context
+    - Only say "I don't have information about [X]" if you've thoroughly searched the context and truly cannot find it
+    - If you find partial or related information, mention what you found and how it relates
     - Never invent course codes, requirements, or prerequisites
-    - Cite sources when making definitive statements (e.g., "According to the CS major requirements...")
-    - If context is insufficient, tell the student what information is missing
+    - Cite sources when making definitive statements (e.g., "According to the Barnard requirements..." or "Based on the Columbia College bulletin...")
+    - If context is insufficient, tell the student what information is missing and suggest where they might find it
     
     ## FOR NON-ACADEMIC QUESTIONS:
     If asked something unrelated to academics/college life, give a brief, friendly response, then gently redirect to academic topics.
@@ -405,97 +424,69 @@ def rag_answer(
         pass  # if extension/version doesn't support it, ignore
 
     # Query top-k (cosine distance). Similarity = 1 - distance.
-    # Prioritize 2026 sources, fall back to 2024-2025 if needed
     vec_literal = "[" + ",".join(f"{x:.8f}" for x in q_vec) + "]"
 
     rows = []
     school_filter = get_school_source_filter(profile.get("school") if profile else None)
     
-    # Define 2026 source patterns (prioritized)
-    sources_2026 = ["seas_2026.json", "barnard_2026.json", "columbia_college_2026.json"]
-    
-    # Step 1: Get results from 2026 sources first (prioritized)
-    # Build 2026 source filter
-    source_2026_filter = " OR ".join([f"source ILIKE '%{s}%'" for s in sources_2026])
-    
+    # Step 1: Get school-specific results first (if school filter exists)
     if school_filter:
-        # If user has school filter, apply it to 2026 sources
-        priority_sql = f"""
+        school_sql = f"""
             select
               id,
               content,
               1 - (embedding <=> %s::vector) as similarity,
               source
             from {table_name}
-            where ({source_2026_filter}) AND source ILIKE %s
+            where source ILIKE %s
             order by embedding <=> %s::vector
             limit %s;
         """
-        cur.execute(priority_sql, (vec_literal, school_filter, vec_literal, TOP_K))
+        cur.execute(school_sql, (vec_literal, school_filter, vec_literal, TOP_K))
+        school_rows = cur.fetchall()
+        rows.extend(school_rows)
+        existing_ids = {row["id"] for row in rows}
+        
+        # Step 2: If we don't have enough school-specific results, fill with general results
+        if len(rows) < TOP_K:
+            remaining = TOP_K - len(rows)
+            general_sql = f"""
+                select
+                  id,
+                  content,
+                  1 - (embedding <=> %s::vector) as similarity,
+                  source
+                from {table_name}
+                where source NOT ILIKE %s
+                order by embedding <=> %s::vector
+                limit %s;
+            """
+            cur.execute(general_sql, (vec_literal, school_filter, vec_literal, remaining))
+            general_rows = cur.fetchall()
+            # Add general results, avoiding duplicates
+            for row in general_rows:
+                if row["id"] not in existing_ids:
+                    rows.append(row)
+                    existing_ids.add(row["id"])
+                    if len(rows) >= TOP_K:
+                        break
+        
+        # Sort by similarity to ensure best results are first
+        rows = sorted(rows, key=lambda x: x["similarity"], reverse=True)[:TOP_K]
     else:
-        # No school filter, get all 2026 sources
-        priority_sql = f"""
+        # No school filter - get general results
+        base_sql = f"""
             select
               id,
               content,
               1 - (embedding <=> %s::vector) as similarity,
               source
             from {table_name}
-            where {source_2026_filter}
             order by embedding <=> %s::vector
             limit %s;
         """
-        cur.execute(priority_sql, (vec_literal, vec_literal, TOP_K))
-    
-    priority_rows = cur.fetchall()
-    rows.extend(priority_rows)
-    existing_ids = {row["id"] for row in rows}
-    
-    # Step 2: Fill remaining slots with 2024-2025 sources if needed
-    if len(rows) < TOP_K:
-        remaining = TOP_K - len(rows)
-        
-        # Build exclusion for 2026 sources
-        exclude_2026 = " AND ".join([f"source NOT ILIKE '%{s}%'" for s in sources_2026])
-        
-        if school_filter:
-            fallback_sql = f"""
-                select
-                  id,
-                  content,
-                  1 - (embedding <=> %s::vector) as similarity,
-                  source
-                from {table_name}
-                where source ILIKE %s AND {exclude_2026}
-                order by embedding <=> %s::vector
-                limit %s;
-            """
-            cur.execute(fallback_sql, (vec_literal, school_filter, vec_literal, remaining))
-        else:
-            fallback_sql = f"""
-                select
-                  id,
-                  content,
-                  1 - (embedding <=> %s::vector) as similarity,
-                  source
-                from {table_name}
-                where {exclude_2026}
-                order by embedding <=> %s::vector
-                limit %s;
-            """
-            cur.execute(fallback_sql, (vec_literal, vec_literal, remaining))
-        
-        fallback_rows = cur.fetchall()
-        # Filter out duplicates and add to results
-        for row in fallback_rows:
-            if row["id"] not in existing_ids:
-                rows.append(row)
-                existing_ids.add(row["id"])
-                if len(rows) >= TOP_K:
-                    break
-    
-    # Sort final results by similarity (2026 results should naturally rank higher due to better matches)
-    rows = sorted(rows, key=lambda x: x["similarity"], reverse=True)[:TOP_K]
+        cur.execute(base_sql, (vec_literal, vec_literal, TOP_K))
+        rows = cur.fetchall()
 
     cur.close()
 

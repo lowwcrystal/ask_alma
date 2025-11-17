@@ -59,11 +59,53 @@ def _batch(iterable, n=64):
         yield chunk
 
 
+# ---------- 3) CHECKPOINT HELPERS ----------
+def save_checkpoint(model_name: str, vectors: List[List[float]], processed_count: int, out_dir: str = "./emb_out"):
+    """Save checkpoint after each batch to allow resuming."""
+    import os
+    os.makedirs(out_dir, exist_ok=True)
+    safe = model_name.replace(":", "_").replace("/", "_")
+    checkpoint_path = os.path.join(out_dir, f"{safe}.checkpoint.npy")
+    np.save(checkpoint_path, np.array(vectors, dtype="float32"))
+    # Save progress info
+    progress_path = os.path.join(out_dir, f"{safe}.progress.txt")
+    with open(progress_path, "w") as f:
+        f.write(f"{processed_count}\n")
+
+
+def load_checkpoint(model_name: str, out_dir: str = "./emb_out") -> tuple[np.ndarray, int]:
+    """Load checkpoint if it exists, return (embeddings_array, processed_count)."""
+    import os
+    safe = model_name.replace(":", "_").replace("/", "_")
+    checkpoint_path = os.path.join(out_dir, f"{safe}.checkpoint.npy")
+    progress_path = os.path.join(out_dir, f"{safe}.progress.txt")
+    
+    if os.path.exists(checkpoint_path) and os.path.exists(progress_path):
+        embeddings = np.load(checkpoint_path)
+        with open(progress_path, "r") as f:
+            processed_count = int(f.read().strip())
+        return embeddings, processed_count
+    return None, 0
+
+
+def clear_checkpoint(model_name: str, out_dir: str = "./emb_out"):
+    """Clear checkpoint files after successful completion."""
+    import os
+    safe = model_name.replace(":", "_").replace("/", "_")
+    checkpoint_path = os.path.join(out_dir, f"{safe}.checkpoint.npy")
+    progress_path = os.path.join(out_dir, f"{safe}.progress.txt")
+    if os.path.exists(checkpoint_path):
+        os.remove(checkpoint_path)
+    if os.path.exists(progress_path):
+        os.remove(progress_path)
+
+
 # ---------- 3) CORE FUNCTION ----------
 def embed_corpus(
     chunks: List[str],
     models: List[str] = None,
     batch_size: int = 64,
+    checkpoint_dir: str = "./emb_out",
 ) -> Dict[str, Dict[str, Any]]:
     """
     Returns a dict:
@@ -88,15 +130,57 @@ def embed_corpus(
             raise ValueError(f"Unknown model '{model_name}'. Add it to MODEL_BUILDERS.")
 
         embedder = MODEL_BUILDERS[model_name]()
-        vectors: List[List[float]] = []
+        
+        # Try to load checkpoint
+        checkpoint_embeddings, processed_count = load_checkpoint(model_name, checkpoint_dir)
+        if checkpoint_embeddings is not None:
+            vectors = checkpoint_embeddings.tolist()
+            tqdm.write(f"Resuming from checkpoint: {processed_count}/{len(chunks)} chunks already processed")
+        else:
+            vectors = []
+            processed_count = 0
 
         # Try batched embedding (LangChain embeds) with graceful fallback
         try:
             # Some backends support list input natively; we still batch to control memory.
             batches = list(_batch(chunks, batch_size))
-            for batch in tqdm(batches, desc=f"Embedding [{model_name}]", unit="batch", 
-                            bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'):
-                vectors.extend(embedder.embed_documents(batch))
+            import time
+            
+            # Skip batches that were already processed
+            start_batch = processed_count // batch_size
+            batches_to_process = batches[start_batch:]
+            
+            if start_batch > 0:
+                tqdm.write(f"Skipping {start_batch} already-processed batches")
+            
+            for batch_idx, batch in enumerate(tqdm(batches_to_process, desc=f"Embedding [{model_name}]", unit="batch", 
+                            initial=start_batch, total=len(batches),
+                            bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')):
+                # Retry logic for rate limits
+                max_retries = 5
+                retry_delay = 2
+                for attempt in range(max_retries):
+                    try:
+                        batch_vectors = embedder.embed_documents(batch)
+                        vectors.extend(batch_vectors)
+                        processed_count += len(batch)
+                        
+                        # Save checkpoint after each successful batch
+                        save_checkpoint(model_name, vectors, processed_count, checkpoint_dir)
+                        break
+                    except Exception as e:
+                        if "rate_limit" in str(e).lower() or "429" in str(e) or "RateLimitError" in str(type(e).__name__):
+                            if attempt < max_retries - 1:
+                                wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                                tqdm.write(f"Rate limit hit, waiting {wait_time}s before retry {attempt + 1}/{max_retries}...")
+                                time.sleep(wait_time)
+                            else:
+                                # Save checkpoint before raising error
+                                save_checkpoint(model_name, vectors, processed_count, checkpoint_dir)
+                                tqdm.write(f"Saved checkpoint at {processed_count}/{len(chunks)} chunks. Resume by running again.")
+                                raise
+                        else:
+                            raise
         except TypeError:
             # Fallback to per-item embedding if the backend doesn't support list calls
             for t in tqdm(chunks, desc=f"Embedding [{model_name}]", unit="chunk",
@@ -110,6 +194,9 @@ def embed_corpus(
             "texts": chunks,
             "ids": ids,
         }
+        
+        # Clear checkpoint after successful completion
+        clear_checkpoint(model_name, checkpoint_dir)
 
     return results
 
@@ -193,7 +280,8 @@ if __name__ == "__main__":
     chunks, metadata = load_chunks_from_jsonl(jsonl_files)
     
     print(f"\nEmbedding {len(chunks)} chunks...")
-    result = embed_corpus(chunks, models=ENABLED_MODELS, batch_size=64)
+    # Use smaller batch size (32) for larger chunks (2000+ chars) to avoid rate limits
+    result = embed_corpus(chunks, models=ENABLED_MODELS, batch_size=32)
     
     for name, payload in result.items():
         print(f"{name}: {payload['embeddings'].shape}, dim: {payload['dim']}")
