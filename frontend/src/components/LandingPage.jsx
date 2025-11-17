@@ -234,11 +234,10 @@ export default function LandingPage() {
     return () => clearInterval(typingInterval);
   }, [typingMessageIndex, messages]);
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim() || isSending) return;
+  const handleSendQuery = async (queryText) => {
+    if (!queryText.trim() || isSending) return;
     
-    const userMessage = searchQuery.trim();
+    const userMessage = queryText.trim();
     const now = new Date().toISOString();
     const newMessages = [...messages, { from: 'user', text: userMessage, timestamp: now }];
     setMessages(newMessages);
@@ -285,6 +284,11 @@ export default function LandingPage() {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    await handleSendQuery(searchQuery);
   };
 
   return (
@@ -376,7 +380,6 @@ export default function LandingPage() {
                     return (
                       <div key={catIdx} className="relative">
                         <button
-                          type="button"
                           onClick={() => {
                             setExpandedCategories(prev => {
                               // If this category is already open, close it
@@ -407,31 +410,30 @@ export default function LandingPage() {
                           </svg>
                         </button>
                       
-                        {expandedCategories[catIdx] && (
-                          <div 
-                            className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border p-2 w-80 z-20 max-h-96 overflow-y-auto"
-                            onMouseLeave={() => setHoveredQuestion(null)}
-                          >
-                            <div className="space-y-1">
-                              {category.questions.map((question, qIdx) => (
-                                <button
-                                  key={qIdx}
-                                  type="button"
-                                  onClick={() => {
-                                    setSearchQuery(question);
-                                    setExpandedCategories({});
-                                    setHoveredQuestion(null);
-                                  }}
-                                  onMouseEnter={() => setHoveredQuestion(question)}
-                                  onMouseLeave={() => setHoveredQuestion(null)}
-                                  className="w-full text-left text-xs hover:bg-[#B9D9EB] rounded-lg px-3 py-2 transition"
-                                >
-                                  {question}
-                                </button>
-                              ))}
-                            </div>
+                      {expandedCategories[catIdx] && (
+                        <div 
+                          className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border p-2 w-80 z-20 max-h-96 overflow-y-auto"
+                          onMouseLeave={() => setHoveredQuestion(null)}
+                        >
+                          <div className="space-y-1">
+                            {category.questions.map((question, qIdx) => (
+                              <button
+                                key={qIdx}
+                                onClick={() => {
+                                  handleSendQuery(question);
+                                  setExpandedCategories({});
+                                  setHoveredQuestion(null);
+                                }}
+                                onMouseEnter={() => setHoveredQuestion(question)}
+                                onMouseLeave={() => setHoveredQuestion(null)}
+                                className="w-full text-left text-xs hover:bg-[#B9D9EB] rounded-lg px-3 py-2 transition"
+                              >
+                                {question}
+                              </button>
+                            ))}
                           </div>
-                        )}
+                        </div>
+                      )}
                       </div>
                     );
                   })}
