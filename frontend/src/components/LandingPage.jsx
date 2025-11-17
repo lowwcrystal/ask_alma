@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUp } from 'lucide-react';
+import { Search, ArrowUp } from 'lucide-react';
 import { categorizedQuestions } from './askAlmaData';
 
 // Get API URL based on environment
@@ -152,8 +152,18 @@ const greetings = [
   "Ready to explore?",
 ];
 
+const placeholders = [
+  "Ask for course suggestions",
+  "Ask for first year requirements",
+  "Ask about registration",
+  "Ask about the Core Curriculum",
+  "Ask about prerequisites",
+  "Ask about academic advisors",
+];
+
 export default function LandingPage() {
   const [greeting, setGreeting] = useState('');
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [messages, setMessages] = useState([]);
   const [showChat, setShowChat] = useState(false);
@@ -163,7 +173,7 @@ export default function LandingPage() {
   const [typingMessageIndex, setTypingMessageIndex] = useState(null);
   const [displayedText, setDisplayedText] = useState('');
   const messagesEndRef = useRef(null);
-  const textareaRef = useRef(null);
+  const [showSuggestedDropdown, setShowSuggestedDropdown] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [hoveredQuestion, setHoveredQuestion] = useState(null);
 
@@ -172,6 +182,16 @@ export default function LandingPage() {
     const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
     setGreeting(randomGreeting);
   }, []);
+
+  // Cycle through placeholders (only when not in chat mode)
+  useEffect(() => {
+    if (showChat) return;
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
+    }, 3000); // Change every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [showChat]);
 
   // Close category dropdowns when clicking outside
   useEffect(() => {
@@ -224,9 +244,6 @@ export default function LandingPage() {
     setMessages(newMessages);
     setShowChat(true);
     setSearchQuery('');
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '52px';
-    }
     setIsSending(true);
 
     try {
@@ -434,11 +451,11 @@ export default function LandingPage() {
                     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
                   };
                   
-                  return (
-                    <div key={i} className="w-full flex items-start">
-                      {/* Profile picture for chatbot or spacer for user */}
-                      {msg.from === 'alma' ? (
-                        <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+                  // Alma message with bubble
+                  if (msg.from === 'alma') {
+                    return (
+                      <div key={i} className="flex items-start gap-3 w-full max-w-2xl">
+                        <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                           <img
                             src="/Icon.png"
                             alt="AskAlma"
@@ -446,27 +463,10 @@ export default function LandingPage() {
                             style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                           />
                         </div>
-                      ) : (
-                        <div className="flex-shrink-0" style={{ width: '47px' }}></div>
-                      )}
-                      
-                      {/* Shared message container - both messages use this same container */}
-                      <div className="flex-1 min-w-0">
-                        <div className={`flex flex-col w-full ${msg.from === 'user' ? 'items-end' : 'items-start'}`}>
-                          <div
-                            className={`px-4 py-2 rounded-3xl ${
-                              msg.from === 'user'
-                                ? 'bg-[#B9D9EB] text-gray-900'
-                                : 'bg-white border shadow-sm'
-                            }`}
-                            style={{ 
-                              maxWidth: '100%',
-                              wordWrap: 'break-word',
-                              overflowWrap: 'break-word'
-                            }}
-                          >
-                            <div className="whitespace-pre-wrap break-words">
-                              {typingMessageIndex === i && msg.from === 'alma' ? (
+                        <div>
+                          <div className="px-4 py-2 rounded-3xl bg-white border shadow-sm">
+                            <div className="whitespace-pre-wrap">
+                              {typingMessageIndex === i ? (
                                 <>
                                   <MarkdownText text={displayedText} />
                                   <span className="animate-pulse">|</span>
@@ -477,33 +477,47 @@ export default function LandingPage() {
                             </div>
                           </div>
                           {msg.timestamp && (
-                            <p className={`text-xs text-gray-500 mt-1 ${msg.from === 'user' ? 'text-right' : 'text-left'}`}>
+                            <p className="text-xs text-gray-500 mt-1">
                               {formatTime(msg.timestamp)}
                             </p>
                           )}
                         </div>
                       </div>
+                    );
+                  }
+                  
+                  // User message: keep bubble style
+                  return (
+                    <div key={i} className="flex items-start gap-3 ml-auto flex-row-reverse max-w-2xl w-fit">
+                      <div>
+                        <div className="px-4 py-2 rounded-3xl bg-[#B9D9EB] text-gray-900">
+                          <div className="whitespace-pre-wrap">
+                            <MarkdownText text={msg.text} />
+                          </div>
+                        </div>
+                        {msg.timestamp && (
+                          <p className="text-xs text-gray-500 mt-1 text-right">
+                            {formatTime(msg.timestamp)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
                 {isSending && (
-                  <div className="w-full flex items-start">
-                    <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+                  <div className="flex items-start gap-3 w-full max-w-2xl">
+                    <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
                       <img
-                        src="/Icon.jpeg"
+                        src="/Icon.png"
                         alt="AskAlma"
                         className="logo-no-bg"
                         style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                       />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-col items-start">
-                        <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
-                          <div className="flex items-center gap-2">
-                            <ThinkingAnimation />
-                            <span className="text-sm text-gray-600">Thinking...</span>
-                          </div>
-                        </div>
+                    <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
+                      <div className="flex items-center gap-2">
+                        <ThinkingAnimation />
+                        <span className="text-sm text-gray-600">Thinking...</span>
                       </div>
                     </div>
                   </div>
@@ -516,17 +530,12 @@ export default function LandingPage() {
               <div className="max-w-3xl mx-auto flex items-end gap-2">
                 <div className="flex-1 relative">
                   <textarea
-                    ref={textareaRef}
                     placeholder="Message AskAlma..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
-                      if (e.target.value.trim()) {
-                        e.target.style.height = 'auto';
-                        e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
-                      } else {
-                        e.target.style.height = '52px';
-                      }
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
                     }}
                     className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
                     onKeyDown={(e) => {

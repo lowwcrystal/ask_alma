@@ -1,11 +1,9 @@
 // src/components/AskAlma.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUp, Menu, X, MoreVertical, Loader2 } from "lucide-react";
+import { ArrowUp, LogOut, Menu, X, MoreVertical } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
-import { ACADEMIC_YEAR_OPTIONS, SCHOOL_OPTIONS } from "../constants/profile";
-import ProfileModal from "./ProfileModal";
+import { initialMessages, suggestedQuestions as initialSuggested, categorizedQuestions } from "./askAlmaData";
 
 // Get API URL based on environment
 const getApiUrl = () => {
@@ -20,25 +18,12 @@ const getApiUrl = () => {
   return 'http://localhost:5001';
 };
 
-const getAcademicYearLabel = (value) => {
-  if (!value) return null;
-  const option = ACADEMIC_YEAR_OPTIONS.find((item) => item.value === value);
-  return option ? option.label : value;
-};
-
-const SCHOOL_LABEL_MAP = Object.fromEntries(SCHOOL_OPTIONS.map((item) => [item.value, item.label]));
-
-const getSchoolLabel = (value) => {
-  if (!value) return null;
-  return SCHOOL_LABEL_MAP[value] || value;
-};
-
 // Thinking animation frames (constant, defined outside component)
 const THINKING_FRAMES = [
-    '/thinking_frame_1.png',
-    '/thinking_frame_2.png',
-    '/thinking_frame_3.png'
-  ];
+  '/thinking_frame_1.png',
+  '/thinking_frame_2.png',
+  '/thinking_frame_3.png'
+];
 
 // Animated thinking indicator component (memoized for performance)
 const ThinkingAnimation = React.memo(function ThinkingAnimation() {
@@ -208,11 +193,11 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
-  return (
-    <div className="w-full flex items-start">
-      {/* Profile picture for chatbot or spacer for user */}
-      {from === "alma" ? (
-        <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+  if (from === "alma") {
+    // Alma message with bubble
+    return (
+      <div className="flex items-start gap-3 w-full max-w-2xl">
+        <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
           <img
             src="/Icon.png"
             alt="AskAlma"
@@ -222,27 +207,10 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
             decoding="async"
           />
         </div>
-      ) : (
-        <div className="flex-shrink-0" style={{ width: '47px' }}></div>
-      )}
-      
-      {/* Shared message container - both messages use this same container */}
-      <div className="flex-1 min-w-0">
-        <div className={`flex flex-col w-full ${from === "user" ? "items-end" : "items-start"}`}>
-          <div
-            className={`px-4 py-2 rounded-3xl ${
-              from === "alma"
-                ? "bg-white border shadow-sm"
-                : "bg-[#B9D9EB] text-gray-900"
-            }`}
-            style={{ 
-              maxWidth: '100%',
-              wordWrap: 'break-word',
-              overflowWrap: 'break-word'
-            }}
-          >
-            <div className="whitespace-pre-wrap break-words">
-              {from === "alma" && isTyping ? (
+        <div>
+          <div className="px-4 py-2 rounded-3xl bg-white border shadow-sm">
+            <div className="whitespace-pre-wrap">
+              {isTyping ? (
                 <TypingText 
                   text={text} 
                   speed={8} 
@@ -254,13 +222,43 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
             </div>
           </div>
           {timestamp && (
-            <p className={`text-xs text-gray-500 mt-1 ${from === "alma" ? "text-left" : "text-right"}`}>
+            <p className="text-xs text-gray-500 mt-1">
               {formatTime(timestamp)}
             </p>
           )}
         </div>
       </div>
+    );
+  }
+
+  // User message: keep bubble style
+  return (
+    <div className="flex items-start gap-3 ml-auto flex-row-reverse max-w-2xl w-fit">
+      <div>
+        <div className="px-4 py-2 rounded-3xl bg-[#B9D9EB] text-gray-900">
+          <div className="whitespace-pre-wrap">
+            <MarkdownText text={text} />
+          </div>
+        </div>
+        {timestamp && (
+          <p className="text-xs text-gray-500 mt-1 text-right">
+            {formatTime(timestamp)}
+          </p>
+        )}
+      </div>
     </div>
+  );
+}
+
+// Suggested question component
+function SuggestedQuestion({ text, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="text-left text-sm bg-white border hover:bg-blue-50 rounded-2xl px-4 py-3 shadow-sm transition"
+    >
+      {text}
+    </button>
   );
 }
 
@@ -276,20 +274,15 @@ const greetings = [
 // Main
 export default function AskAlma() {
   const [messages, setMessages] = useState(initialMessages);
+  const [suggested] = useState(initialSuggested);
   const [input, setInput] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const [conversationId, setConversationId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [latestMessageIndex, setLatestMessageIndex] = useState(-1);
   const [conversations, setConversations] = useState([]);
-  const [profile, setProfile] = useState(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileError, setProfileError] = useState(null);
-  const [profileSaveError, setProfileSaveError] = useState(null);
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [isProfileModalOpen, setProfileModalOpen] = useState(false);
   const messagesEndRef = useRef(null);
-  const textareaRef = useRef(null);
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -298,27 +291,15 @@ export default function AskAlma() {
   const [editingConvId, setEditingConvId] = useState(null);
   const [editingValue, setEditingValue] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showProfileSelector, setShowProfileSelector] = useState(false);
+  const [selectedProfilePic, setSelectedProfilePic] = useState(() => {
+    return localStorage.getItem('profilePic') || '/Alma_pfp.png';
+  });
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
   const [greeting, setGreeting] = useState('');
+  const [showSuggestedDropdown, setShowSuggestedDropdown] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [hoveredQuestion, setHoveredQuestion] = useState(null);
-
-  const schoolLabel = profile?.school ? getSchoolLabel(profile.school) : null;
-  const academicYearLabel = profile?.academic_year ? getAcademicYearLabel(profile.academic_year) : null;
-  const profileSubtitle = (() => {
-    if (profileLoading) return 'Loading profile...';
-    if (!profile) return 'Add your academic profile';
-    const segments = [];
-    if (profile.major) {
-      segments.push(profile.major);
-    }
-    const infoParts = [schoolLabel, academicYearLabel].filter(Boolean);
-    if (infoParts.length) {
-      segments.push(infoParts.join(' • '));
-    }
-    return segments.join(' — ') || 'Update your academic profile';
-  })();
 
   // Set random greeting on mount
   useEffect(() => {
@@ -350,55 +331,6 @@ export default function AskAlma() {
 
     fetchConversations();
   }, [user]);
-
-  useEffect(() => {
-    if (!user?.id) {
-      setProfile(null);
-      return;
-    }
-
-    let isCancelled = false;
-    const fetchProfile = async () => {
-      setProfileLoading(true);
-      setProfileError(null);
-      try {
-        const apiUrl = getApiUrl();
-        const response = await fetch(`${apiUrl}/api/profile/${user.id}`);
-        if (isCancelled) return;
-
-        if (response.status === 404) {
-          setProfile(null);
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error('Failed to load profile');
-        }
-
-        const data = await response.json();
-        setProfile(data);
-      } catch (err) {
-        if (!isCancelled) {
-          setProfileError(err.message || 'Unable to load profile');
-        }
-      } finally {
-        if (!isCancelled) {
-          setProfileLoading(false);
-        }
-      }
-    };
-
-    fetchProfile();
-    return () => {
-      isCancelled = true;
-    };
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!isProfileModalOpen) {
-      setProfileSaveError(null);
-    }
-  }, [isProfileModalOpen]);
 
   // Handle search query from landing page
   useEffect(() => {
@@ -451,6 +383,7 @@ export default function AskAlma() {
     const userMessage = { from: "user", text: queryText, timestamp: now };
     
     setMessages(prev => [...prev, userMessage]);
+    setShowSuggestions(false);
     setIsLoading(true);
     setError(null);
 
@@ -518,9 +451,6 @@ export default function AskAlma() {
     const text = input.trim();
     if (!text || isLoading) return;
     setInput("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '52px';
-    }
     await handleSendQuery(text);
   };
 
@@ -563,6 +493,7 @@ export default function AskAlma() {
       // Update state with loaded conversation
       setConversationId(convId);
       setMessages(loadedMessages);
+      setShowSuggestions(false);
       setError(null);
       setLatestMessageIndex(-1); // Don't animate old messages
       setMobileMenuOpen(false); // Close mobile menu after loading conversation
@@ -580,6 +511,7 @@ export default function AskAlma() {
   const startNewChat = () => {
     setMessages([]);
     setConversationId(null);
+    setShowSuggestions(false);
     setError(null);
     setLatestMessageIndex(-1);
     setMobileMenuOpen(false); // Close mobile menu after starting new chat
@@ -628,38 +560,6 @@ export default function AskAlma() {
     }
   };
 
-  const handleSaveProfile = async (updates) => {
-    if (!user?.id) return;
-
-    setProfileSaving(true);
-    setProfileSaveError(null);
-    try {
-      const apiUrl = getApiUrl();
-      const response = await fetch(`${apiUrl}/api/profile`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: user.id,
-          ...updates,
-        }),
-      });
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || 'Failed to save profile');
-      }
-
-      const data = await response.json();
-      setProfile(data);
-      setProfileModalOpen(false);
-    } catch (err) {
-      console.error('Error saving profile:', err);
-      setProfileSaveError(err.message || 'Failed to save profile');
-    } finally {
-      setProfileSaving(false);
-    }
-  };
-
   const handleContextMenu = (e, conv) => {
     e.preventDefault();
     setContextMenu({
@@ -688,17 +588,14 @@ export default function AskAlma() {
     setEditingValue("");
   };
 
-  const toggleSidebarVisibility = () => {
-    if (sidebarVisible) {
-      setSidebarVisible(false);
-      setMobileMenuOpen(false);
-    } else {
-      setSidebarVisible(true);
-    }
+  const handleProfileSelect = (profilePic) => {
+    setSelectedProfilePic(profilePic);
+    localStorage.setItem('profilePic', profilePic);
+    setShowProfileSelector(false);
   };
 
   return (
-    <div className="flex w-screen h-screen bg-almaGray overflow-x-hidden">
+    <div className="flex w-screen h-screen bg-almaGray">
       {/* Mobile overlay backdrop */}
       {mobileMenuOpen && (
         <div 
@@ -708,145 +605,128 @@ export default function AskAlma() {
       )}
 
       {/* Sidebar */}
-      {(sidebarVisible || mobileMenuOpen) && (
-        <div className={`
-          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-          ${sidebarVisible ? 'md:translate-x-0 md:flex' : 'md:-translate-x-full md:hidden'}
-          fixed md:relative
-          w-64 bg-gray-100 border-r p-4 flex flex-col
-          z-50 h-full
-          transition-transform duration-300 ease-in-out
-        `}>
+      <div className={`
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:translate-x-0
+        fixed md:relative
+        w-64 bg-gray-100 border-r p-4 flex flex-col
+        z-50 h-full
+        transition-transform duration-300 ease-in-out
+      `}>
         <button 
           onClick={startNewChat}
-            className="bg-[#B9D9EB] text-gray-900 font-medium rounded-xl py-2 mb-4 hover:bg-[#A8CEE1] transition"
+          className="bg-almaLightBlue text-gray-900 font-medium rounded-lg py-2 mb-4 hover:brightness-95 transition"
         >
           + New Chat
         </button>
         
-          {/* Conversations List */}
-          <div className="flex-1 overflow-y-auto mb-4">
-            <h3 className="text-xs font-semibold text-gray-600 mb-2 px-2">Your Chats</h3>
-            {conversations.length === 0 ? (
-              <p className="text-xs text-gray-500 px-2">No conversations yet</p>
-            ) : (
-              <div className="space-y-1">
-                {conversations.map((conv) => (
-                  editingConvId === conv.id ? (
-                    <div
-                      key={conv.id}
-                      className={`w-full p-2 rounded text-sm ${
-                        conversationId === conv.id ? 'bg-gray-200' : ''
-                      }`}
+        {/* Conversations List */}
+        <div className="flex-1 overflow-y-auto mb-4">
+          <h3 className="text-xs font-semibold text-gray-600 mb-2 px-2">Your Chats</h3>
+          {conversations.length === 0 ? (
+            <p className="text-xs text-gray-500 px-2">No conversations yet</p>
+          ) : (
+            <div className="space-y-1">
+              {conversations.map((conv) => (
+                editingConvId === conv.id ? (
+                  <div
+                    key={conv.id}
+                    className={`w-full p-2 rounded text-sm ${
+                      conversationId === conv.id ? 'bg-gray-200' : ''
+                    }`}
+                  >
+                    <input
+                      type="text"
+                      value={editingValue}
+                      onChange={(e) => setEditingValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          saveRename(conv.id);
+                        } else if (e.key === 'Escape') {
+                          cancelRename();
+                        }
+                      }}
+                      onBlur={() => saveRename(conv.id)}
+                      className="w-full px-2 py-1 text-sm font-normal text-[#003865] border rounded focus:outline-none focus:ring-2 focus:ring-[#003865]"
+                      autoFocus
+                    />
+                  </div>
+                ) : (
+                  <div
+                    key={conv.id}
+                    className={`w-full flex items-center gap-2 p-2 rounded text-sm hover:bg-[#B9D9EB] transition ${
+                      conversationId === conv.id ? 'bg-gray-200' : ''
+                    }`}
+                  >
+                    <button
+                      onClick={() => loadConversation(conv.id)}
+                      onContextMenu={(e) => handleContextMenu(e, conv)}
+                      className="flex-1 text-left truncate font-normal"
                     >
-                      <input
-                        type="text"
-                        value={editingValue}
-                        onChange={(e) => setEditingValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            saveRename(conv.id);
-                          } else if (e.key === 'Escape') {
-                            cancelRename();
-                          }
-                        }}
-                        onBlur={() => saveRename(conv.id)}
-                        className="w-full px-2 py-1 text-sm font-normal text-[#003865] border rounded focus:outline-none focus:ring-2 focus:ring-[#003865]"
-                        autoFocus
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      key={conv.id}
-                      className={`w-full flex items-center gap-2 p-2 rounded text-sm hover:bg-[#B9D9EB] transition ${
-                        conversationId === conv.id ? 'bg-gray-200' : ''
-                      }`}
+                      {conv.title}
+                    </button>
+                    {/* Mobile three-dot menu */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMobileConvMenu(mobileConvMenu === conv.id ? null : conv.id);
+                      }}
+                      className="md:hidden p-1 hover:bg-gray-200 rounded"
                     >
-                      <button
-                        onClick={() => loadConversation(conv.id)}
-                        onContextMenu={(e) => handleContextMenu(e, conv)}
-                        className="flex-1 text-left truncate font-normal"
-                      >
-                        {conv.title}
-                      </button>
-                      {/* Mobile three-dot menu */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMobileConvMenu(mobileConvMenu === conv.id ? null : conv.id);
-                        }}
-                        className="md:hidden p-1 hover:bg-gray-200 rounded"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                      {/* Mobile dropdown menu */}
-                      {mobileConvMenu === conv.id && (
-                        <div className="absolute right-8 bg-white border shadow-lg rounded-lg py-1 z-50">
-                          <button
-                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-                            onClick={() => {
-                              startRenaming(conv);
-                              setMobileConvMenu(null);
-                            }}
-                          >
-                            Rename
-                          </button>
-                          <button
-                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
-                            onClick={() => {
-                              setMobileConvMenu(null);
-                              if (window.confirm("This can't be undone. Confirm below to continue")) {
-                                handleDeleteConversation(conv.id);
-                              }
-                            }}
-                          >
-                            Delete
-                          </button>
-          </div>
-        )}
-                    </div>
-                  )
-                ))}
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    {/* Mobile dropdown menu */}
+                    {mobileConvMenu === conv.id && (
+                      <div className="absolute right-8 bg-white border shadow-lg rounded-lg py-1 z-50">
+                        <button
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                          onClick={() => {
+                            startRenaming(conv);
+                            setMobileConvMenu(null);
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
+                          onClick={() => {
+                            setMobileConvMenu(null);
+                            if (window.confirm("This can't be undone. Confirm below to continue")) {
+                              handleDeleteConversation(conv.id);
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              ))}
             </div>
           )}
-          </div>
-          
-          <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3 space-y-2">
-            <button
-              type="button"
-              onClick={() => setProfileModalOpen(true)}
-              className="w-full flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-gray-100 transition text-left"
-            >
-              {profile?.profile_image ? (
-                <img
-                  src={profile.profile_image}
-                  alt="Profile"
-                  className="w-8 h-8 rounded-full object-cover border border-[#003865]/40"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-[#003865] flex items-center justify-center text-white font-semibold">
-                  {(user?.email?.[0] || 'A').toUpperCase()}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold truncate">{user?.email || 'Columbia Student'}</p>
-                <p className="text-xs text-gray-500 truncate">
-                  {profileSubtitle}
-                </p>
-                {!profileLoading && profileError && (
-                  <p className="text-xs text-red-500 mt-1 truncate">
-                    Unable to load profile details
-                  </p>
-                )}
-              </div>
-              {profileLoading && <Loader2 className="w-4 h-4 text-[#003865] animate-spin" />}
-            </button>
-          </div>
         </div>
-      )}
+        
+        <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3">
+          <button 
+            onClick={() => setShowProfileSelector(true)}
+            className="flex items-center gap-2 w-full hover:bg-gray-200 p-2 rounded-lg transition"
+          >
+            <img 
+              src={selectedProfilePic} 
+              alt="Profile" 
+              className="w-8 h-8 rounded-full object-cover"
+            />
+            <div className="text-left">
+              <p className="font-semibold truncate">{user?.email || 'Columbia Student'}</p>
+              <p className="text-xs text-gray-500">Change Profile Picture</p>
+            </div>
+          </button>
+        </div>
+      </div>
 
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-x-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-screen">
         <header className="flex-shrink-0 border-b p-4 md:p-8 flex items-center justify-between bg-white shadow-sm">
           <div className="flex items-center gap-2 md:gap-4">
             <img
@@ -865,47 +745,171 @@ export default function AskAlma() {
             </div>
           </div>
           
-          {/* Hamburger menu - right side */}
+          {/* Desktop logout button */}
           <button
-            onClick={() => {
-              setMobileMenuOpen(!mobileMenuOpen);
-              if (window.innerWidth >= 768) {
-                toggleSidebarVisibility();
-              }
-            }}
-            className="p-2 hover:bg-gray-100 rounded-lg"
-            title="Menu"
+            onClick={handleLogout}
+            className="hidden md:flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-[#003865] hover:bg-gray-50 rounded-lg transition"
+            title="Log out"
           >
-            {(mobileMenuOpen || sidebarVisible) ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            <LogOut className="w-5 h-5" />
+            <span>Log out</span>
+          </button>
+
+          {/* Mobile hamburger menu */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 hover:bg-gray-100 rounded-lg"
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden py-4">
-          <div className="flex flex-col space-y-4 px-4 md:px-6">
-            {messages.map((msg, i) => (
-              <ChatMessage 
-                key={i} 
-                from={msg.from} 
-                text={msg.text}
-                sources={msg.sources}
-                timestamp={msg.timestamp}
-                isTyping={msg.from === "alma" && i === latestMessageIndex}
-              />
-            ))}
-            
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="w-full flex items-start">
-                <div className="flex-shrink-0 mt-1 rounded-full mr-3" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
-                  <img
-                    src="/Icon.png"
-                    alt="AskAlma"
-                    className="logo-no-bg"
-                    style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
-                  />
+        {messages.length === 0 ? (
+          // Centered greeting view when no messages (like landing page)
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex items-center justify-center px-6">
+              <div className="w-full max-w-5xl">
+                {/* Greeting */}
+                <h2 className="text-4xl md:text-5xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-8 pb-2" style={{ lineHeight: '1.3' }}>
+                  {greeting}
+                </h2>
+
+                {/* Extended Search Box Container */}
+                <div className="bg-white rounded-3xl shadow-lg p-6 w-full mx-auto">
+                  {/* Search Input */}
+                  <div className="relative mb-4">
+                    <textarea
+                      placeholder="Ask me anything about Columbia..."
+                      className={`w-full px-6 py-4 pr-14 text-lg bg-gray-50 border-0 rounded-2xl focus:outline-none resize-none ${
+                        hoveredQuestion && !input ? 'text-gray-400' : 'text-gray-900'
+                      } placeholder-gray-400`}
+                      style={{ outline: 'none' }}
+                      value={hoveredQuestion && !input ? hoveredQuestion : input}
+                      onChange={(e) => {
+                        setInput(e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                      rows={1}
+                    />
+                    <button
+                      onClick={handleSend}
+                      disabled={isLoading || !input.trim()}
+                      className={`absolute right-3 top-[50%] -translate-y-1/2 p-2 rounded-full transition ${
+                        isLoading || !input.trim()
+                          ? "bg-gray-300 cursor-not-allowed"
+                          : "bg-[#003865] text-white hover:bg-[#002d4f]"
+                      }`}
+                    >
+                      <ArrowUp className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Category Dropdowns - Horizontal Layout */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 category-dropdown-container">
+                    {categorizedQuestions.map((category, catIdx) => {
+                      // Map category name to icon filename
+                      const iconName = category.category.replace(/\s+/g, '_');
+                      const iconPath = `/dropdown_icons/${iconName}.png`;
+                      
+                      return (
+                        <div key={catIdx} className="relative">
+                          <button
+                            onClick={() => {
+                              setExpandedCategories(prev => {
+                                // If this category is already open, close it
+                                if (prev[catIdx]) {
+                                  return {};
+                                }
+                                // Otherwise, close all and open only this one
+                                return { [catIdx]: true };
+                              });
+                            }}
+                            className="w-full px-3 py-3 text-left flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img 
+                                src={iconPath} 
+                                alt={category.category} 
+                                className="w-6 h-6 flex-shrink-0 object-contain"
+                              />
+                              <span className="font-semibold text-[#003865] text-sm whitespace-nowrap">{category.category}</span>
+                            </div>
+                            <svg 
+                              className={`w-3 h-3 flex-shrink-0 ml-1 transition-transform ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        
+                        {expandedCategories[catIdx] && (
+                          <div 
+                            className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border p-2 w-80 z-20 max-h-96 overflow-y-auto"
+                            onMouseLeave={() => setHoveredQuestion(null)}
+                          >
+                            <div className="space-y-1">
+                              {category.questions.map((question, qIdx) => (
+                                <button
+                                  key={qIdx}
+                                  onClick={() => {
+                                    handleSendQuery(question);
+                                    setExpandedCategories({});
+                                    setHoveredQuestion(null);
+                                  }}
+                                  onMouseEnter={() => setHoveredQuestion(question)}
+                                  onMouseLeave={() => setHoveredQuestion(null)}
+                                  className="w-full text-left text-xs hover:bg-[#B9D9EB] rounded-lg px-3 py-2 transition"
+                                >
+                                  {question}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-col items-start">
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Normal chat view with messages
+          <>
+            <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
+              <div className="flex flex-col space-y-4">
+                {messages.map((msg, i) => (
+                  <ChatMessage 
+                    key={i} 
+                    from={msg.from} 
+                    text={msg.text}
+                    sources={msg.sources}
+                    timestamp={msg.timestamp}
+                    isTyping={msg.from === "alma" && i === latestMessageIndex}
+                  />
+                ))}
+                
+                {/* Loading indicator */}
+                {isLoading && (
+                  <div className="max-w-2xl w-fit flex items-start gap-3 self-start">
+                    <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
+                      <img
+                        src="/Icon.png"
+                        alt="AskAlma"
+                        className="logo-no-bg"
+                        style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
+                      />
+                    </div>
                     <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
                       <div className="flex items-center gap-2">
                         <ThinkingAnimation />
@@ -913,63 +917,58 @@ export default function AskAlma() {
                       </div>
                     </div>
                   </div>
+                )}
+                
+                {/* Error message */}
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    <strong>Error:</strong> {error}
+                  </div>
+                )}
+                
+                {/* Invisible div for auto-scrolling */}
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+
+            {/* Input bar - ChatGPT style */}
+            <div className="flex-shrink-0 p-4 bg-almaGray">
+              <div className="max-w-5xl mx-auto flex items-end gap-2">
+                <div className="flex-1 relative">
+                  <textarea
+                    placeholder="Message AskAlma..."
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    rows={1}
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={isLoading || !input.trim()}
+                    className={`absolute right-2 top-[45%] -translate-y-1/2 p-2 rounded-full transition flex items-center justify-center ${
+                      isLoading || !input.trim()
+                        ? "bg-gray-300 cursor-not-allowed"
+                        : "bg-[#003865] text-white hover:bg-[#002d4f]"
+                    }`}
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Input bar - ChatGPT style */}
-        <div className="flex-shrink-0 p-4 bg-almaGray">
-          <div className="max-w-5xl mx-auto flex items-end gap-2">
-            <div className="flex-1 relative">
-              <textarea
-                ref={textareaRef}
-                placeholder="Message AskAlma..."
-                className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none resize-none min-h-[52px] max-h-[200px]"
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  if (e.target.value.trim()) {
-                    e.target.style.height = 'auto';
-                    e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
-                  } else {
-                    e.target.style.height = '52px';
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                rows={1}
-              />
-              <button
-                onClick={handleSend}
-                disabled={isLoading || !input.trim()}
-                className={`absolute right-2 top-[45%] -translate-y-1/2 p-2 rounded-full transition flex items-center justify-center ${
-                  isLoading || !input.trim()
-                    ? "bg-gray-300 cursor-not-allowed"
-                    : "bg-[#003865] text-white hover:bg-[#002d4f]"
-                }`}
-              >
-                <ArrowUp className="w-4 h-4" />
-              </button>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
-
-      <ProfileModal
-        isOpen={Boolean(user?.id) && isProfileModalOpen}
-        onClose={() => setProfileModalOpen(false)}
-        profile={profile}
-        onSave={handleSaveProfile}
-        saving={profileSaving}
-        error={profileSaveError}
-        onLogout={handleLogout}
-      />
 
       {/* Context Menu */}
       {contextMenu && (
@@ -1027,6 +1026,48 @@ export default function AskAlma() {
         </div>
       )}
 
+      {/* Profile Picture Selector Modal */}
+      {showProfileSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowProfileSelector(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Choose Your Profile Picture</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => handleProfileSelect('/Alma_pfp.png')}
+                className={`p-4 border-2 rounded-lg hover:bg-gray-50 transition ${
+                  selectedProfilePic === '/Alma_pfp.png' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                }`}
+              >
+                <img 
+                  src="/Alma_pfp.png" 
+                  alt="Alma Profile" 
+                  className="w-full h-auto rounded-lg mb-2"
+                />
+                <p className="text-sm font-medium text-center">Alma</p>
+              </button>
+              <button
+                onClick={() => handleProfileSelect('/Roaree_pfp.png')}
+                className={`p-4 border-2 rounded-lg hover:bg-gray-50 transition ${
+                  selectedProfilePic === '/Roaree_pfp.png' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                }`}
+              >
+                <img 
+                  src="/Roaree_pfp.png" 
+                  alt="Roaree Profile" 
+                  className="w-full h-auto rounded-lg mb-2"
+                />
+                <p className="text-sm font-medium text-center">Roaree</p>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowProfileSelector(false)}
+              className="mt-4 w-full px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
