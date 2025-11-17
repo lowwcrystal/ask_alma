@@ -256,38 +256,40 @@ export default function ProfileModal({
             </p>
           </div>
 
-            <div className="flex items-center justify-between pt-4 border-t">
+          </form>
+        </div>
+        <div className="flex-shrink-0 border-t px-6 py-4">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => {
+                if (onLogout) {
+                  onLogout();
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Log out</span>
+            </button>
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => {
-                  onClose();
-                  if (onLogout) {
-                    onLogout();
-                  }
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
               >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Log out</span>
+                Cancel
               </button>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 bg-[#003865] text-white text-sm font-medium rounded-lg hover:bg-[#002d4f] transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Saving...' : 'Save changes'}
-                </button>
-              </div>
+              <button
+                type="submit"
+                form="profile-form"
+                disabled={saving}
+                className="px-4 py-2 bg-[#003865] text-white text-sm font-medium rounded-lg hover:bg-[#002d4f] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving...' : 'Save changes'}
+              </button>
             </div>
-          </form>
+          </div>
         </div>
       </div>
     </div>
