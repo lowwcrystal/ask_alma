@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowUp, LogOut, Menu, X, MoreVertical } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { initialMessages, suggestedQuestions as initialSuggested } from "./askAlmaData";
+import { initialMessages, suggestedQuestions as initialSuggested, categorizedQuestions } from "./askAlmaData";
 
 // Get API URL based on environment
 const getApiUrl = () => {
@@ -291,13 +291,11 @@ export default function AskAlma() {
   const [editingConvId, setEditingConvId] = useState(null);
   const [editingValue, setEditingValue] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showProfileSelector, setShowProfileSelector] = useState(false);
-  const [selectedProfilePic, setSelectedProfilePic] = useState(() => {
-    return localStorage.getItem('profilePic') || '/Alma_pfp.png';
-  });
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
   const [greeting, setGreeting] = useState('');
   const [showSuggestedDropdown, setShowSuggestedDropdown] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState({});
+  const [hoveredQuestion, setHoveredQuestion] = useState(null);
 
   // Set random greeting on mount
   useEffect(() => {
@@ -356,6 +354,23 @@ export default function AskAlma() {
       return () => document.removeEventListener('click', handleClick);
     }
   }, [mobileConvMenu]);
+
+  // Close category dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      // Check if any category is expanded
+      if (Object.keys(expandedCategories).length > 0) {
+        // Close dropdowns if click is outside the dropdown container
+        const isClickInsideDropdown = e.target.closest('.category-dropdown-container');
+        if (!isClickInsideDropdown) {
+          setExpandedCategories({});
+        }
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [expandedCategories]);
 
   const handleSendQuery = async (queryText) => {
     if (!queryText.trim() || isLoading) return;
@@ -569,12 +584,6 @@ export default function AskAlma() {
     setEditingValue("");
   };
 
-  const handleProfileSelect = (profilePic) => {
-    setSelectedProfilePic(profilePic);
-    localStorage.setItem('profilePic', profilePic);
-    setShowProfileSelector(false);
-  };
-
   return (
     <div className="flex w-screen h-screen bg-almaGray">
       {/* Mobile overlay backdrop */}
@@ -689,20 +698,11 @@ export default function AskAlma() {
         </div>
         
         <div className="text-sm text-gray-600 border-t -mx-4 px-4 pt-3">
-          <button 
-            onClick={() => setShowProfileSelector(true)}
-            className="flex items-center gap-2 w-full hover:bg-gray-200 p-2 rounded-lg transition"
-          >
-            <img 
-              src={selectedProfilePic} 
-              alt="Profile" 
-              className="w-8 h-8 rounded-full object-cover"
-            />
+          <div className="flex items-center gap-2 p-2">
             <div className="text-left">
               <p className="font-semibold truncate">{user?.email || 'Columbia Student'}</p>
-              <p className="text-xs text-gray-500">Change Profile Picture</p>
             </div>
-          </button>
+          </div>
         </div>
       </div>
 
@@ -749,81 +749,116 @@ export default function AskAlma() {
           // Centered greeting view when no messages (like landing page)
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 flex items-center justify-center px-6">
-              <div className="w-full max-w-3xl">
+              <div className="w-full max-w-5xl">
                 {/* Greeting */}
                 <h2 className="text-4xl md:text-5xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-8 pb-2" style={{ lineHeight: '1.3' }}>
                   {greeting}
                 </h2>
 
-                {/* Search Bar */}
-                <div className="relative">
-                  <textarea
-                    placeholder="Ask me anything about Columbia..."
-                    className="w-full px-6 py-4 pr-14 text-lg bg-white text-gray-900 placeholder-gray-400 border-0 rounded-full focus:outline-none resize-none shadow-lg"
-                    style={{ outline: 'none' }}
-                    value={input}
-                    onChange={(e) => {
-                      setInput(e.target.value);
-                      e.target.style.height = 'auto';
-                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                    rows={1}
-                  />
-                  <button
-                    onClick={handleSend}
-                    disabled={isLoading || !input.trim()}
-                    className={`absolute right-3 top-[50%] -translate-y-1/2 p-2 rounded-full transition ${
-                      isLoading || !input.trim()
-                        ? "bg-gray-300 cursor-not-allowed"
-                        : "bg-[#003865] text-white hover:bg-[#002d4f]"
-                    }`}
-                  >
-                    <ArrowUp className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Ask Alma's Choice - Below searchbar, right corner */}
-                <div className="flex justify-end mt-2">
-                  <div className="relative">
+                {/* Extended Search Box Container */}
+                <div className="bg-white rounded-3xl shadow-lg p-6 w-full mx-auto">
+                  {/* Search Input */}
+                  <div className="relative mb-4">
+                    <textarea
+                      placeholder="Ask me anything about Columbia..."
+                      className={`w-full px-6 py-4 pr-14 text-lg bg-gray-50 border-0 rounded-2xl focus:outline-none resize-none ${
+                        hoveredQuestion && !input ? 'text-gray-400' : 'text-gray-900'
+                      } placeholder-gray-400`}
+                      style={{ outline: 'none' }}
+                      value={hoveredQuestion && !input ? hoveredQuestion : input}
+                      onChange={(e) => {
+                        setInput(e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                      rows={1}
+                    />
                     <button
-                      onClick={() => setShowSuggestedDropdown(!showSuggestedDropdown)}
-                      className="px-3 py-2 bg-white border-0 shadow-lg rounded-full text-xs text-gray-700 hover:text-[#003865] transition flex items-center gap-1.5"
+                      onClick={handleSend}
+                      disabled={isLoading || !input.trim()}
+                      className={`absolute right-3 top-[50%] -translate-y-1/2 p-2 rounded-full transition ${
+                        isLoading || !input.trim()
+                          ? "bg-gray-300 cursor-not-allowed"
+                          : "bg-[#003865] text-white hover:bg-[#002d4f]"
+                      }`}
                     >
-                      <img 
-                        src="/Icon.png" 
-                        alt="Alma" 
-                        className="w-4 h-4 object-contain"
-                      />
-                      <span>Ask Alma's Choice</span>
-                      <svg className={`w-3 h-3 transition-transform ${showSuggestedDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                      <ArrowUp className="w-5 h-5" />
                     </button>
-                    
-                    {showSuggestedDropdown && (
-                      <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-lg border p-4 w-80 z-10 max-h-96 overflow-y-auto">
-                        <div className="grid grid-cols-1 gap-2">
-                          {suggested.map((q, i) => (
-                            <button
-                              key={i}
-                              onClick={() => {
-                                handleSendQuery(q);
-                                setShowSuggestedDropdown(false);
-                              }}
-                              className="text-left text-sm bg-gray-50 hover:bg-blue-50 rounded-xl px-4 py-3 transition border border-gray-200"
+                  </div>
+
+                  {/* Category Dropdowns - Horizontal Layout */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 category-dropdown-container">
+                    {categorizedQuestions.map((category, catIdx) => {
+                      // Map category name to icon filename
+                      const iconName = category.category.replace(/\s+/g, '_');
+                      const iconPath = `/dropdown_icons/${iconName}.png`;
+                      
+                      return (
+                        <div key={catIdx} className="relative">
+                          <button
+                            onClick={() => {
+                              setExpandedCategories(prev => {
+                                // If this category is already open, close it
+                                if (prev[catIdx]) {
+                                  return {};
+                                }
+                                // Otherwise, close all and open only this one
+                                return { [catIdx]: true };
+                              });
+                            }}
+                            className="w-full px-3 py-3 text-left flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img 
+                                src={iconPath} 
+                                alt={category.category} 
+                                className="w-6 h-6 flex-shrink-0 object-contain"
+                              />
+                              <span className="font-semibold text-[#003865] text-sm whitespace-nowrap">{category.category}</span>
+                            </div>
+                            <svg 
+                              className={`w-3 h-3 flex-shrink-0 ml-1 transition-transform ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
                             >
-                              {q}
-                            </button>
-                          ))}
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        
+                        {expandedCategories[catIdx] && (
+                          <div 
+                            className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border p-2 w-80 z-20 max-h-96 overflow-y-auto"
+                            onMouseLeave={() => setHoveredQuestion(null)}
+                          >
+                            <div className="space-y-1">
+                              {category.questions.map((question, qIdx) => (
+                                <button
+                                  key={qIdx}
+                                  onClick={() => {
+                                    handleSendQuery(question);
+                                    setExpandedCategories({});
+                                    setHoveredQuestion(null);
+                                  }}
+                                  onMouseEnter={() => setHoveredQuestion(question)}
+                                  onMouseLeave={() => setHoveredQuestion(null)}
+                                  className="w-full text-left text-xs hover:bg-[#B9D9EB] rounded-lg px-3 py-2 transition"
+                                >
+                                  {question}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -972,48 +1007,6 @@ export default function AskAlma() {
         </div>
       )}
 
-      {/* Profile Picture Selector Modal */}
-      {showProfileSelector && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowProfileSelector(false)}>
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">Choose Your Profile Picture</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => handleProfileSelect('/Alma_pfp.png')}
-                className={`p-4 border-2 rounded-lg hover:bg-gray-50 transition ${
-                  selectedProfilePic === '/Alma_pfp.png' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                }`}
-              >
-                <img 
-                  src="/Alma_pfp.png" 
-                  alt="Alma Profile" 
-                  className="w-full h-auto rounded-lg mb-2"
-                />
-                <p className="text-sm font-medium text-center">Alma</p>
-              </button>
-              <button
-                onClick={() => handleProfileSelect('/Roaree_pfp.png')}
-                className={`p-4 border-2 rounded-lg hover:bg-gray-50 transition ${
-                  selectedProfilePic === '/Roaree_pfp.png' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                }`}
-              >
-                <img 
-                  src="/Roaree_pfp.png" 
-                  alt="Roaree Profile" 
-                  className="w-full h-auto rounded-lg mb-2"
-                />
-                <p className="text-sm font-medium text-center">Roaree</p>
-              </button>
-            </div>
-            <button
-              onClick={() => setShowProfileSelector(false)}
-              className="mt-4 w-full px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

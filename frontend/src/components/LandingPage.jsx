@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ArrowUp } from 'lucide-react';
+import { categorizedQuestions } from './askAlmaData';
 
 // Get API URL based on environment
 const getApiUrl = () => {
@@ -173,6 +174,8 @@ export default function LandingPage() {
   const [displayedText, setDisplayedText] = useState('');
   const messagesEndRef = useRef(null);
   const [showSuggestedDropdown, setShowSuggestedDropdown] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState({});
+  const [hoveredQuestion, setHoveredQuestion] = useState(null);
 
   // Set random greeting on mount
   useEffect(() => {
@@ -189,6 +192,23 @@ export default function LandingPage() {
 
     return () => clearInterval(interval);
   }, [showChat]);
+
+  // Close category dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      // Check if any category is expanded
+      if (Object.keys(expandedCategories).length > 0) {
+        // Close dropdowns if click is outside the dropdown container
+        const isClickInsideDropdown = e.target.closest('.category-dropdown-container');
+        if (!isClickInsideDropdown) {
+          setExpandedCategories({});
+        }
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [expandedCategories]);
 
   // Typewriter effect for AI responses
   useEffect(() => {
@@ -303,71 +323,118 @@ export default function LandingPage() {
         {!showChat ? (
           // Initial centered view
           <div className="flex-1 flex items-center justify-center px-6">
-            <div className="w-full max-w-3xl">
+            <div className="w-full max-w-5xl">
               {/* Greeting */}
-              <h2 className="text-4xl md:text-4xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-8 pb-2" style={{ lineHeight: '1.3' }}>
+              <h2 className="text-4xl md:text-5xl font-semibold text-center bg-gradient-to-r from-[#4a90b8] to-[#002d4f] bg-clip-text text-transparent mb-8 pb-2" style={{ lineHeight: '1.3' }}>
                 {greeting}
               </h2>
 
-              {/* Search Bar */}
-              <form onSubmit={handleSearch} className="relative">
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={placeholders[placeholderIndex]}
-                    className="w-full px-6 py-4 pr-14 text-lg bg-white text-gray-900 placeholder-gray-400 border-0 rounded-full focus:outline-none focus:ring-0 shadow-lg transition-all peer"
+              {/* Extended Search Box Container */}
+              <div className="bg-white rounded-3xl shadow-lg p-6 w-full mx-auto">
+                {/* Search Input */}
+                <div className="relative mb-4">
+                  <textarea
+                    placeholder="Ask me anything about Columbia..."
+                    className={`w-full px-6 py-4 pr-14 text-lg bg-gray-50 border-0 rounded-2xl focus:outline-none resize-none ${
+                      hoveredQuestion && !searchQuery ? 'text-gray-400' : 'text-gray-900'
+                    } placeholder-gray-400`}
                     style={{ outline: 'none' }}
+                    value={hoveredQuestion && !searchQuery ? hoveredQuestion : searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSearch(e);
+                      }
+                    }}
+                    rows={1}
                   />
                   <button
-                    type="submit"
-                    className="absolute right-3 p-2 rounded-full transition-all text-[#003865] peer-focus:bg-[#003865] peer-focus:text-white hover:opacity-70"
-                    aria-label="Search"
+                    onClick={handleSearch}
+                    disabled={isSending || !searchQuery.trim()}
+                    className={`absolute right-3 top-[50%] -translate-y-1/2 p-2 rounded-full transition ${
+                      isSending || !searchQuery.trim()
+                        ? "bg-gray-300 cursor-not-allowed"
+                        : "bg-[#003865] text-white hover:bg-[#002d4f]"
+                    }`}
                   >
-                    <Search className="w-5 h-5" />
+                    <ArrowUp className="w-5 h-5" />
                   </button>
                 </div>
-              </form>
 
-              {/* Ask Alma's Choice - Below searchbar, right corner */}
-              <div className="flex justify-end mt-2">
-                <div className="relative">
-                  <button
-                    onClick={() => setShowSuggestedDropdown(!showSuggestedDropdown)}
-                    type="button"
-                    className="px-3 py-2 bg-white border-0 shadow-lg rounded-full text-xs text-gray-700 hover:text-[#003865] transition flex items-center gap-1.5"
-                  >
-                    <img 
-                      src="/Icon.png" 
-                      alt="Alma" 
-                      className="w-4 h-4 object-contain"
-                    />
-                    <span>Ask Alma's Choice</span>
-                    <svg className={`w-3 h-3 transition-transform ${showSuggestedDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  
-                  {showSuggestedDropdown && (
-                    <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-lg border p-4 w-80 z-10 max-h-96 overflow-y-auto">
-                      <div className="grid grid-cols-1 gap-2">
-                        {placeholders.map((q, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => {
-                              setSearchQuery(q);
-                              setShowSuggestedDropdown(false);
-                            }}
-                            className="text-left text-sm bg-gray-50 hover:bg-blue-50 rounded-xl px-4 py-3 transition border border-gray-200"
+                {/* Category Dropdowns - Horizontal Layout */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 category-dropdown-container">
+                  {categorizedQuestions.map((category, catIdx) => {
+                    // Map category name to icon filename
+                    const iconName = category.category.replace(/\s+/g, '_');
+                    const iconPath = `/dropdown_icons/${iconName}.png`;
+                    
+                    return (
+                      <div key={catIdx} className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedCategories(prev => {
+                              // If this category is already open, close it
+                              if (prev[catIdx]) {
+                                return {};
+                              }
+                              // Otherwise, close all and open only this one
+                              return { [catIdx]: true };
+                            });
+                          }}
+                          className="w-full px-3 py-3 text-left flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-xl transition border border-gray-200"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <img 
+                              src={iconPath} 
+                              alt={category.category} 
+                              className="w-6 h-6 flex-shrink-0 object-contain"
+                            />
+                            <span className="font-semibold text-[#003865] text-sm whitespace-nowrap">{category.category}</span>
+                          </div>
+                          <svg 
+                            className={`w-3 h-3 flex-shrink-0 ml-1 transition-transform ${expandedCategories[catIdx] ? 'rotate-180' : ''}`} 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
                           >
-                            {q}
-                          </button>
-                        ))}
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      
+                        {expandedCategories[catIdx] && (
+                          <div 
+                            className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border p-2 w-80 z-20 max-h-96 overflow-y-auto"
+                            onMouseLeave={() => setHoveredQuestion(null)}
+                          >
+                            <div className="space-y-1">
+                              {category.questions.map((question, qIdx) => (
+                                <button
+                                  key={qIdx}
+                                  type="button"
+                                  onClick={() => {
+                                    setSearchQuery(question);
+                                    setExpandedCategories({});
+                                    setHoveredQuestion(null);
+                                  }}
+                                  onMouseEnter={() => setHoveredQuestion(question)}
+                                  onMouseLeave={() => setHoveredQuestion(null)}
+                                  className="w-full text-left text-xs hover:bg-[#B9D9EB] rounded-lg px-3 py-2 transition"
+                                >
+                                  {question}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
               </div>
             </div>
