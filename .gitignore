@@ -46,6 +46,7 @@ build/
 *_2024_2025.json
 *_2026.json
 chunked_*.jsonl
+*_summary.txt
 !package.json
 !package-lock.json
 !vercel.json
