@@ -37,11 +37,11 @@ export const categorizedQuestions = [
     ]
   },
   {
-    category: "Opportunities",
+    category: "Professors",
     questions: [
-      "How can I find research opportunities with Columbia professors in my department?",
-      "Which classes should I take to prepare for software engineering internships?",
-      "Are there recommended courses if I'm interested in quantitative finance or trading?"
+      "How does Professor Brian Borowski compare to Professor Jae Lee for Data Structures?",
+      "What do students think of Professor Sunil Gulati?",
+      "What does Professor Martha Kim teach?"
     ]
   },
   {

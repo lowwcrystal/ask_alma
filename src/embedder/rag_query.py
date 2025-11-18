@@ -2,6 +2,7 @@
 import os
 import textwrap
 import json
+import re
 from typing import Optional, List, Dict, Any
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -221,7 +222,8 @@ def build_prompt(
     ## YOUR ROLE & BEHAVIOR:
     You are a VERSATILE academic advisor who can help with a wide range of academic questions, including:
     - Course information (descriptions, prerequisites, credits, workload, when offered)
-    - Professor and department research areas
+    - Professor reviews and teaching styles (from CULPA student feedback)
+    - Professor research areas and department information
     - Major and minor requirements
     - Degree program structures and tracks
     - Semester and academic planning
@@ -271,7 +273,35 @@ def build_prompt(
     - "What does Professor [NAME] research?" → Describe research areas
     - "Who teaches in the [DEPARTMENT]?" → List faculty
     
-    ### 4. Planning and Recommendations (detailed rules below)
+    ### 4. Professor Review Queries (from CULPA student reviews)
+    **When answering questions about professor reviews, teaching style, or student opinions:**
+    
+    **Provide balanced, fair, and comprehensive reviews:**
+    - Include BOTH positive and negative feedback from students
+    - Highlight frequently mentioned points (teaching style, workload, grading, accessibility)
+    - Mention specific examples from student reviews when available
+    - Cite the overall rating (e.g., "Professor X has an overall rating of 3.8/5.0")
+    - Cover key aspects: teaching effectiveness, clarity, workload, grading fairness, approachability
+    - End with a balanced summary that helps students make informed decisions
+    
+    **For professor comparisons:**
+    - Give equal coverage to both/all professors being compared
+    - Use fair, objective language based on student feedback
+    - Compare on similar dimensions (teaching style, workload, grading, accessibility)
+    - Acknowledge that experiences vary and one professor isn't necessarily "better" overall
+    - Help students make informed decisions based on their preferences (e.g., "If you prefer clear lectures, Professor A might be better; if you want more discussion, consider Professor B")
+    
+    **Handle partial or informal names flexibly:**
+    - Students may use only last names (e.g., "Professor Borowski" instead of "Brian Borowski")
+    - Students may use only first names or nicknames in some cases
+    - Be flexible with the name and use the context to help you find the correct professor
+    - If you find reviews in context matching the partial name, use them
+    - If NO matching professor is found in the context:
+      * Say: "I don't have reviews for a professor by that name in my database."
+      * If there are similar names in the context, suggest them: "Did you mean Professor [Full Name] or Professor [Other Similar Name]?"
+      * Be helpful: "Could you provide the full name or the course they teach?"
+    
+    ### 5. Planning and Recommendations (detailed rules below)
     
     ## RULES FOR COURSE RECOMMENDATIONS AND PLANNING:
     **These rules apply ONLY when making course recommendations or creating semester plans:**
@@ -350,7 +380,7 @@ def build_prompt(
     If asked something unrelated to academics/college life, give a brief, friendly response, then gently redirect to academic topics.
     {history_text}
     ═══════════════════════════════════════════════════════════
-    CONTEXT FROM COURSE BULLETINS AND ACADEMIC REQUIREMENTS:
+    CONTEXT FROM COURSE BULLETINS, ACADEMIC REQUIREMENTS, AND PROFESSOR REVIEWS:
     ═══════════════════════════════════════════════════════════
     {context_text}
     
@@ -362,18 +392,113 @@ def build_prompt(
     ═══════════════════════════════════════════════════════════
     CRITICAL REMINDERS BEFORE ANSWERING:
     ═══════════════════════════════════════════════════════════
-    ✓ What type of question is this? (factual info vs. planning/recommendations)
+    ✓ What type of question is this? (factual info vs. planning/recommendations vs. professor reviews)
     ✓ Is this related to the previous conversation? (should I use chat history?)
     ✓ Do I have the information needed in the CONTEXT to answer accurately?
+    ✓ If about professors: Are there CULPA reviews in the context? Did I provide balanced positive/negative feedback?
+    ✓ If about professors: Is the name partial? Should I clarify or suggest similar names?
     ✓ If making recommendations: Have they mentioned courses already taken?
     ✓ If making recommendations: Do I need to ask for more information first?
     
     **Response approach based on question type:**
     - Factual question about courses/requirements → Answer directly from context
+    - Professor review question → Provide balanced summary with rating, positive/negative points, handle partial names
     - Personalized planning → Check for completed courses, ask for missing info if needed
     - Follow-up question → Reference chat history if relevant
     - Unrelated new question → Ignore chat history, focus on current question
     """)
+
+# -------------------------------
+# Comparison Query Detection and Multi-Query Retrieval
+# -------------------------------
+
+def detect_professor_comparison(question: str) -> Optional[tuple]:
+    """
+    Detect if the question is comparing two professors.
+    Returns (professor1, professor2) if comparison detected, None otherwise.
+    """
+    # Patterns to detect comparisons - ordered from most specific to least specific
+    patterns = [
+        # "Compare Professor X and Professor Y"
+        r'compare\s+professor\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)\s+(?:and|to|with|vs\.?|versus)\s+professor\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)',
+        # "Compare X and Y for..." (without "professor")
+        r'compare\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)\s+(?:and|to|with|vs\.?|versus)\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)\s+for',
+        # "Which is better: Professor X or Professor Y"
+        r'(?:which|who)\s+is\s+better[\s\:]+professor\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)\s+(?:or|vs\.?)\s+professor\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)',
+        # "How does Professor X compare to Professor Y"
+        r'how\s+does\s+professor\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)\s+compare\s+(?:to|with)\s+professor\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)',
+        # "Professor X versus Professor Y"
+        r'professor\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)\s+(?:versus|vs\.?)\s+professor\s+([a-zA-Z\'\-]+(?:\s+[a-zA-Z\'\-]+)?)',
+    ]
+    
+    question_lower = question.lower()
+    
+    for pattern in patterns:
+        match = re.search(pattern, question_lower, re.IGNORECASE)
+        if match:
+            prof1 = match.group(1).strip()
+            prof2 = match.group(2).strip()
+            
+            # Validate that we got reasonable professor names (2-4 words max)
+            prof1_words = prof1.split()
+            prof2_words = prof2.split()
+            
+            if (len(prof1_words) <= 4 and len(prof2_words) <= 4 and 
+                prof1 and prof2 and prof1 != prof2):
+                return (prof1, prof2)
+    
+    return None
+
+
+def retrieve_for_professor(
+    professor_name: str,
+    embedder: OpenAIEmbeddings,
+    cur,
+    table_name: str,
+    school_filter: Optional[str],
+    limit: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    Retrieve chunks specifically for a given professor.
+    """
+    # Create a targeted query for this professor
+    prof_query = f"Professor {professor_name} teaching style reviews rating"
+    prof_vec = embedder.embed_query(prof_query)
+    vec_literal = "[" + ",".join(f"{x:.8f}" for x in prof_vec) + "]"
+    
+    # Search specifically for CULPA sources mentioning this professor
+    if school_filter:
+        sql = f"""
+            select
+              id,
+              content,
+              1 - (embedding <=> %s::vector) as similarity,
+              source
+            from {table_name}
+            where (source ILIKE %s OR source ILIKE 'culpa.info%%')
+              and (content ILIKE %s OR source ILIKE %s)
+            order by embedding <=> %s::vector
+            limit %s;
+        """
+        prof_pattern = f"%{professor_name}%"
+        cur.execute(sql, (vec_literal, school_filter, prof_pattern, prof_pattern, vec_literal, limit))
+    else:
+        sql = f"""
+            select
+              id,
+              content,
+              1 - (embedding <=> %s::vector) as similarity,
+              source
+            from {table_name}
+            where (content ILIKE %s OR source ILIKE %s)
+            order by embedding <=> %s::vector
+            limit %s;
+        """
+        prof_pattern = f"%{professor_name}%"
+        cur.execute(sql, (vec_literal, prof_pattern, prof_pattern, vec_literal, limit))
+    
+    return cur.fetchall()
+
 
 # -------------------------------
 # Main query function
@@ -448,64 +573,93 @@ def rag_answer(
         school_value = profile.get("school")
     school_filter = get_school_source_filter(school_value)
     
-    # Step 1: Get school-specific results first (if school filter exists)
-    if school_filter:
-        school_sql = f"""
-            select
-              id,
-              content,
-              1 - (embedding <=> %s::vector) as similarity,
-              source
-            from {table_name}
-            where source ILIKE %s
-            order by embedding <=> %s::vector
-            limit %s;
-        """
-        cur.execute(school_sql, (vec_literal, school_filter, vec_literal, TOP_K))
-        school_rows = cur.fetchall()
-        rows.extend(school_rows)
-        existing_ids = {row["id"] for row in rows}
+    # Check if this is a professor comparison query
+    comparison = detect_professor_comparison(question)
+    
+    if comparison:
+        # Multi-query retrieval for fair comparison
+        prof1, prof2 = comparison
+        print(f"[DEBUG] Detected comparison: {prof1} vs {prof2}")
         
-        # Step 2: If we don't have enough school-specific results, fill with general results
-        if len(rows) < TOP_K:
-            remaining = TOP_K - len(rows)
-            general_sql = f"""
+        # Retrieve TOP_K/2 results for each professor
+        per_prof_limit = TOP_K // 2
+        
+        prof1_rows = retrieve_for_professor(prof1, embedder, cur, table_name, school_filter, per_prof_limit)
+        prof2_rows = retrieve_for_professor(prof2, embedder, cur, table_name, school_filter, per_prof_limit)
+        
+        # Combine results, avoiding duplicates
+        seen_ids = set()
+        for row in prof1_rows + prof2_rows:
+            if row["id"] not in seen_ids:
+                rows.append(row)
+                seen_ids.add(row["id"])
+        
+        # Sort by similarity
+        rows = sorted(rows, key=lambda x: x["similarity"], reverse=True)[:TOP_K]
+        
+        print(f"[DEBUG] Retrieved {len(prof1_rows)} chunks for {prof1}, {len(prof2_rows)} chunks for {prof2}")
+    else:
+        # Normal single-query retrieval
+        # Step 1: Get school-specific results + CULPA sources (if school filter exists)
+        # IMPORTANT: Always include CULPA (professor reviews) regardless of school
+        if school_filter:
+            school_sql = f"""
                 select
                   id,
                   content,
                   1 - (embedding <=> %s::vector) as similarity,
                   source
                 from {table_name}
-                where source NOT ILIKE %s
+                where (source ILIKE %s OR source ILIKE 'culpa.info%%')
                 order by embedding <=> %s::vector
                 limit %s;
             """
-            cur.execute(general_sql, (vec_literal, school_filter, vec_literal, remaining))
-            general_rows = cur.fetchall()
-            # Add general results, avoiding duplicates
-            for row in general_rows:
-                if row["id"] not in existing_ids:
-                    rows.append(row)
-                    existing_ids.add(row["id"])
-                    if len(rows) >= TOP_K:
-                        break
-        
-        # Sort by similarity to ensure best results are first
-        rows = sorted(rows, key=lambda x: x["similarity"], reverse=True)[:TOP_K]
-    else:
-        # No school filter - get general results
-        base_sql = f"""
-            select
-              id,
-              content,
-              1 - (embedding <=> %s::vector) as similarity,
-              source
-            from {table_name}
-            order by embedding <=> %s::vector
-            limit %s;
-        """
-        cur.execute(base_sql, (vec_literal, vec_literal, TOP_K))
-        rows = cur.fetchall()
+            cur.execute(school_sql, (vec_literal, school_filter, vec_literal, TOP_K))
+            school_rows = cur.fetchall()
+            rows.extend(school_rows)
+            existing_ids = {row["id"] for row in rows}
+            
+            # Step 2: If we don't have enough school-specific results, fill with general results
+            # This catches other schools' data + any CULPA sources not already retrieved
+            if len(rows) < TOP_K:
+                remaining = TOP_K - len(rows)
+                general_sql = f"""
+                    select
+                      id,
+                      content,
+                      1 - (embedding <=> %s::vector) as similarity,
+                      source
+                    from {table_name}
+                    where (source NOT ILIKE %s OR source ILIKE 'culpa.info%%')
+                    order by embedding <=> %s::vector
+                    limit %s;
+                """
+                cur.execute(general_sql, (vec_literal, school_filter, vec_literal, remaining))
+                general_rows = cur.fetchall()
+                # Add general results, avoiding duplicates
+                for row in general_rows:
+                    if row["id"] not in existing_ids:
+                        rows.append(row)
+                        existing_ids.add(row["id"])
+                        if len(rows) >= TOP_K:
+                            break
+            
+            # Sort by similarity to ensure best results are first
+            rows = sorted(rows, key=lambda x: x["similarity"], reverse=True)[:TOP_K]
+        else:
+            # No school filter - get general results
+            base_sql = f"""
+                select
+                  id,
+                  content,
+                  1 - (embedding <=> %s::vector) as similarity,
+                  source
+                from {table_name}
+                order by embedding <=> %s::vector
+                limit %s;
+            """
+            cur.execute(base_sql, (vec_literal, vec_literal, TOP_K))
+            rows = cur.fetchall()
 
     cur.close()
 
