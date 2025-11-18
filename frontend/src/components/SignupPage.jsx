@@ -43,6 +43,22 @@ export default function SignupPage() {
       return;
     }
 
+    // Validate required profile fields
+    if (!school) {
+      setError('Please select your school');
+      return;
+    }
+
+    if (!academicYear) {
+      setError('Please select your academic year');
+      return;
+    }
+
+    if (!major || major.trim() === '') {
+      setError('Please enter your major');
+      return;
+    }
+
     const minorsList = parseListInput(minors);
     const classesTakenList = parseListInput(classesTaken);
 
@@ -50,9 +66,9 @@ export default function SignupPage() {
     try {
       const result = await signUp(email, password, {
         name: email.split('@')[0],
-        school: school || null,
-        academic_year: academicYear || null,
-        major: major || null,
+        school: school,
+        academic_year: academicYear,
+        major: major.trim(),
         minors: minorsList,
         classes_taken: classesTakenList,
       });
@@ -64,19 +80,23 @@ export default function SignupPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               user_id: result.user.id,
-              school: school || null,
-              academic_year: academicYear || null,
-              major: major || null,
+              school: school,
+              academic_year: academicYear,
+              major: major.trim(),
               minors: minorsList,
               classes_taken: classesTakenList,
             }),
           });
 
           if (!response.ok) {
-            console.error('Profile save failed:', await response.text());
+            const errorText = await response.text();
+            console.error('Profile save failed:', errorText);
+            // Don't block signup if profile save fails, but log it
+            throw new Error('Failed to save profile: ' + errorText);
           }
         } catch (profileError) {
           console.error('Failed to save user profile:', profileError);
+          // Continue with signup flow even if profile save fails
         }
 
         if (!result.session) {
@@ -184,6 +204,7 @@ export default function SignupPage() {
                   value={school}
                   onChange={(e) => setSchool(e.target.value)}
                   className="w-full px-2 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 bg-white relative z-10"
+                  required
                 >
                   <option value="" disabled hidden>Select your school</option>
                   {SCHOOL_OPTIONS.map((option) => (
@@ -204,6 +225,7 @@ export default function SignupPage() {
                   value={academicYear}
                   onChange={(e) => setAcademicYear(e.target.value)}
                   className="w-full px-2 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 bg-white relative z-10"
+                  required
                 >
                   <option value="" disabled hidden>Select your year</option>
                   {ACADEMIC_YEAR_OPTIONS.map((option) => (
@@ -226,6 +248,7 @@ export default function SignupPage() {
                 onChange={(e) => setMajor(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300"
                 placeholder="e.g. Computer Science"
+                required
               />
             </div>
           </div>
