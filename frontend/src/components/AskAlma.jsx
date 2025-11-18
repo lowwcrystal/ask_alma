@@ -783,6 +783,14 @@ export default function AskAlma() {
       <div className="flex-1 flex flex-col min-w-0 h-screen">
         <header className="flex-shrink-0 border-b p-4 md:p-8 flex items-center justify-between bg-white shadow-sm">
           <div className="flex items-center gap-2 md:gap-4">
+            {/* Mobile hamburger menu - left side */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 hover:bg-gray-100 rounded-lg"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+            
             <img
               src="/AskAlma_Logo.jpg?v=1"
               alt="AskAlma Logo"
@@ -807,14 +815,6 @@ export default function AskAlma() {
           >
             <LogOut className="w-5 h-5" />
             <span>Log out</span>
-          </button>
-
-          {/* Mobile hamburger menu */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 hover:bg-gray-100 rounded-lg"
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </header>
 
