@@ -208,7 +208,7 @@ export default function LandingPage() {
         setTypingMessageIndex(null);
         setDisplayedText('');
       }
-    }, 20); // Adjust speed here (lower = faster)
+    }, 8); // Adjust speed here (lower = faster)
     
     return () => clearInterval(typingInterval);
   }, [typingMessageIndex, messages]);

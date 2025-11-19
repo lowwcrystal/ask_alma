@@ -45,7 +45,7 @@ OLLAMA_MODELS = {
 }
 
 # Choose your model
-OPENAI_MODEL = "gpt-4o-mini"  # Which OpenAI model to use
+OPENAI_MODEL = "gpt-4o"  # Which OpenAI model to use
 OLLAMA_MODEL = "llama3.1"     # Which Ollama model to use
 
 TOP_K       = 6                   # how many chunks to retrieve
