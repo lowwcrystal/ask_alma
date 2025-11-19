@@ -1,6 +1,6 @@
 // src/components/AskAlma.jsx
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams, useParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowUp, Menu, X, MoreVertical } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { categorizedQuestions } from "./askAlmaData";
@@ -277,7 +277,6 @@ export default function AskAlma() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [searchParams] = useSearchParams();
-  const { conversationId: urlConversationId } = useParams();
   const [contextMenu, setContextMenu] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [editingConvId, setEditingConvId] = useState(null);
@@ -376,21 +375,10 @@ export default function AskAlma() {
     fetchConversations();
   }, [user]);
 
-  // Load conversation from URL on mount
-  useEffect(() => {
-    if (urlConversationId && user?.id) {
-      // Load the conversation if there's a conversationId in the URL
-      // Pass shouldNavigate=false since we're already on the correct URL
-      loadConversation(urlConversationId, false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlConversationId, user]);
-
   // Handle search query from landing page
   useEffect(() => {
     const query = searchParams.get('q');
-    // Only handle query if there's no conversation ID in the URL
-    if (query && !urlConversationId) {
+    if (query) {
       handleSendQuery(query);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -463,8 +451,6 @@ export default function AskAlma() {
       // Update conversation ID if this is a new conversation
       if (!conversationId && data.conversation_id) {
         setConversationId(data.conversation_id);
-        // Navigate to the new conversation URL
-        navigate(`/chat/${data.conversation_id}`, { replace: true });
         // Refresh conversations list to show the new conversation
         fetchConversations();
       }
@@ -528,7 +514,7 @@ export default function AskAlma() {
     }
   };
 
-  const loadConversation = async (convId, shouldNavigate = true) => {
+  const loadConversation = async (convId) => {
     try {
       const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/conversations/${convId}`);
@@ -555,11 +541,6 @@ export default function AskAlma() {
       setError(null);
       setLatestMessageIndex(-1); // Don't animate old messages
       setMobileMenuOpen(false); // Close mobile menu after loading conversation
-      
-      // Navigate to conversation URL only if requested (e.g., from sidebar click)
-      if (shouldNavigate && urlConversationId !== convId) {
-        navigate(`/chat/${convId}`);
-      }
     } catch (err) {
       console.error('Error loading conversation:', err);
       // Check if it's a network/CORS error
@@ -577,8 +558,6 @@ export default function AskAlma() {
     setError(null);
     setLatestMessageIndex(-1);
     setMobileMenuOpen(false); // Close mobile menu after starting new chat
-    // Navigate to /chat without a conversation ID
-    navigate('/chat');
   };
 
   const handleLogout = () => {
