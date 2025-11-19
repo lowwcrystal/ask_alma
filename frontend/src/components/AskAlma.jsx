@@ -283,7 +283,13 @@ export default function AskAlma() {
   const [editingConvId, setEditingConvId] = useState(null);
   const [editingValue, setEditingValue] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    // Initialize based on screen size - default to collapsed on desktop
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768 ? false : false; // Start open on desktop
+    }
+    return false;
+  });
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [greeting, setGreeting] = useState('');
