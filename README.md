@@ -1,6 +1,6 @@
 # Ask Alma
 
-A Retrieval-Augmented Generation (RAG) system for answering questions about Columbia College, Columbia Engineering, and Barnard College. AskAlma helps students with course planning, professor reviews, academic requirements, and registration guidance using course bulletins and student reviews.
+AskAlma is an AI powered academic advisor that answers students' questions about courses, professors, and degree requirements. It provides verified academic information from official Columbia bulletins and websites to help students plan smarter and better.
 
 ## Overview
 
