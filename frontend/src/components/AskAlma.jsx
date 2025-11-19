@@ -254,9 +254,11 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
 
 // Greeting options for variation
 const greetings = [
-  "What's on your mind today?",
-  "How can I help you?",
-  "What would you like to know?",
+  "Need info? I got you, just like JJ's at midnight.",
+  "Ask away — the city's not the only thing that never sleeps.",
+  "Unlike CourseWorks, I won't crash. What do you need?",
+  "Alma's listening. What's up?",
+  "Bold. Beautiful. Barnard baddies.",
   "Ask me anything about Columbia!",
   "Ready to explore?",
 ];
