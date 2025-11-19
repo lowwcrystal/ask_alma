@@ -68,6 +68,14 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/chat/:conversationId"
+              element={
+                <ProtectedRoute>
+                  <AskAlma />
+                </ProtectedRoute>
+              }
+            />
           </Routes>
         </Suspense>
       </BrowserRouter>
