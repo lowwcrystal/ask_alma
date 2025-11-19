@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ACADEMIC_YEAR_OPTIONS, SCHOOL_OPTIONS } from '../constants/profile';
+import SEO from './SEO';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
@@ -130,7 +131,13 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+    <>
+      <SEO 
+        title="Sign Up"
+        description="Create your AskAlma account - Your AI Academic Advisor for Columbia University"
+        path="/signup"
+      />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
       {/* Back to home button - top left */}
       <button
         onClick={() => navigate('/')}
@@ -339,6 +346,7 @@ export default function SignupPage() {
         </form>
       </div>
     </div>
+    </>
   );
 }
 

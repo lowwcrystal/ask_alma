@@ -5,6 +5,7 @@ import { ArrowUp, Menu, X, MoreVertical, Search } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { categorizedQuestions } from "./askAlmaData";
 import ProfileModal from "./ProfileModal";
+import SEO from "./SEO";
 
 // Get API URL based on environment
 const getApiUrl = () => {
@@ -195,9 +196,9 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
   };
 
   if (from === "alma") {
-    // Alma message with bubble
+    // Alma message with bubble - aligned so it starts where user messages end
     return (
-      <div className="flex items-start gap-3 w-full max-w-2xl">
+      <div className="flex items-start gap-3 max-w-2xl">
         <div className="flex-shrink-0 mt-1 rounded-full" style={{ width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#B9D9EB' }}>
           <img
             src="/Icon.png"
@@ -208,7 +209,7 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
             decoding="async"
           />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <div className="px-4 py-2 rounded-3xl bg-white border shadow-sm">
             <div className="whitespace-pre-wrap">
               {isTyping ? (
@@ -232,10 +233,10 @@ function ChatMessage({ from, text, sources, timestamp, isTyping = false }) {
     );
   }
 
-  // User message: keep bubble style
+  // User message: right-aligned, same max-width as Alma messages
   return (
-    <div className="flex items-start gap-3 ml-auto flex-row-reverse max-w-2xl w-fit">
-      <div>
+    <div className="flex items-start gap-3 ml-auto flex-row-reverse max-w-2xl">
+      <div className="flex-1 min-w-0">
         <div className="px-4 py-2 rounded-3xl bg-[#B9D9EB] text-gray-900">
           <div className="whitespace-pre-wrap">
             <MarkdownText text={text} />
@@ -732,7 +733,13 @@ export default function AskAlma() {
   };
 
   return (
-    <div className="flex w-screen h-screen bg-almaGray">
+    <>
+      <SEO 
+        title="Chat"
+        description="Chat with AskAlma - Get instant answers about courses, registration, Core Curriculum, and more for Columbia University students."
+        path="/chat"
+      />
+      <div className="flex w-screen h-screen bg-almaGray">
       {/* Mobile overlay backdrop - covers entire screen including header */}
       {mobileMenuOpen && (
         <div 
@@ -1219,5 +1226,6 @@ export default function AskAlma() {
         onLogout={handleLogout}
       />
     </div>
+    </>
   );
 }

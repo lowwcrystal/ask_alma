@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUp } from 'lucide-react';
 import { categorizedQuestions } from './askAlmaData';
+import SEO from './SEO';
 
 // Get API URL based on environment
 const getApiUrl = () => {
@@ -271,7 +272,13 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="h-screen bg-almaGray flex flex-col overflow-hidden">
+    <>
+      <SEO 
+        title="Home"
+        description="AskAlma is your intelligent AI academic advisor for Columbia University. Get instant answers about courses, registration, Core Curriculum, professors, and more."
+        keywords="Columbia University, AI advisor, academic advisor, course registration, Core Curriculum, Columbia College, SEAS, Barnard"
+      />
+      <div className="h-screen bg-almaGray flex flex-col overflow-hidden">
       {/* Header */}
       <header className="flex-shrink-0 w-full px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -424,7 +431,7 @@ export default function LandingPage() {
           // Chat view
           <>
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              <div className="max-w-3xl mx-auto flex flex-col space-y-4">
+              <div className="max-w-2xl mx-auto flex flex-col space-y-4">
                 {messages.map((msg, i) => {
                   const formatTime = (ts) => {
                     if (!ts) return '';
@@ -432,7 +439,7 @@ export default function LandingPage() {
                     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
                   };
                   
-                  // Alma message with bubble
+                  // Alma message with bubble - profile picture on left, text content doesn't extend under it
                   if (msg.from === 'alma') {
                     return (
                       <div key={i} className="flex items-start gap-3 w-full max-w-2xl">
@@ -444,8 +451,8 @@ export default function LandingPage() {
                             style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                           />
                         </div>
-                        <div>
-                          <div className="px-4 py-2 rounded-3xl bg-white border shadow-sm">
+                        <div className="flex-1 min-w-0">
+                          <div className="px-4 py-2 rounded-3xl bg-white border shadow-sm w-fit max-w-full">
                             <div className="whitespace-pre-wrap">
                               {typingMessageIndex === i ? (
                                 <>
@@ -467,10 +474,10 @@ export default function LandingPage() {
                     );
                   }
                   
-                  // User message: keep bubble style
+                  // User message: right-aligned, only takes needed width, constrained by max-w-2xl
                   return (
-                    <div key={i} className="flex items-start gap-3 ml-auto flex-row-reverse max-w-2xl w-fit">
-                      <div>
+                    <div key={i} className="flex items-start gap-3 ml-auto flex-row-reverse w-full max-w-2xl">
+                      <div className="w-fit">
                         <div className="px-4 py-2 rounded-3xl bg-[#B9D9EB] text-gray-900">
                           <div className="whitespace-pre-wrap">
                             <MarkdownText text={msg.text} />
@@ -495,10 +502,12 @@ export default function LandingPage() {
                         style={{ width: '35px', height: 'auto', objectFit: 'contain' }}
                       />
                     </div>
-                    <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl">
-                      <div className="flex items-center gap-2">
-                        <ThinkingAnimation />
-                        <span className="text-sm text-gray-600">Thinking...</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="bg-white border shadow-sm px-4 py-2 rounded-3xl w-fit max-w-full">
+                        <div className="flex items-center gap-2">
+                          <ThinkingAnimation />
+                          <span className="text-sm text-gray-600">Thinking...</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -545,6 +554,7 @@ export default function LandingPage() {
         )}
       </div>
     </div>
+    </>
   );
 }
 
