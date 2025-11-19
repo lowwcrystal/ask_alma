@@ -145,7 +145,9 @@ const ThinkingAnimation = React.memo(function ThinkingAnimation() {
 });
 
 const greetings = [
-  "Need info? I got you, just like JJ's at midnight. Ask away — the city's not the only thing that never sleeps. Unlike CourseWorks, I won't crash. What do you need?",
+  "Need info? I got you, just like JJ's at midnight.", 
+  "Ask away, the city's not the only thing that never sleeps.",
+  "Unlike CourseWorks, I won't crash. What do you need?",
   "Alma's listening. What's up?",
   "Bold. Beautiful. Barnard baddies.",
 ];
