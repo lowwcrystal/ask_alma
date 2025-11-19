@@ -1,6 +1,6 @@
 // src/components/AskAlma.jsx
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { ArrowUp, Menu, X, MoreVertical, Search } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { categorizedQuestions } from "./askAlmaData";
@@ -277,6 +277,7 @@ export default function AskAlma() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [searchParams] = useSearchParams();
+  const { conversationId: urlConversationId } = useParams();
   const [contextMenu, setContextMenu] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [editingConvId, setEditingConvId] = useState(null);
@@ -290,29 +291,7 @@ export default function AskAlma() {
     return false;
   });
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth < 768;
-    }
-    return false;
-  });
-
-  // Detect mobile screen size and handle transitions
-  useEffect(() => {
-    const checkMobile = () => {
-      const wasMobile = isMobile;
-      const nowMobile = window.innerWidth < 768;
-      setIsMobile(nowMobile);
-      
-      // When transitioning from mobile to desktop, close mobile menu
-      if (wasMobile && !nowMobile) {
-        setMobileMenuOpen(false);
-      }
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, [isMobile]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [greeting, setGreeting] = useState('');
   const [expandedCategories, setExpandedCategories] = useState({});
   const [hoveredQuestion, setHoveredQuestion] = useState(null);
@@ -418,10 +397,21 @@ export default function AskAlma() {
     return () => clearTimeout(timeoutId);
   }, [user, conversationSearchQuery]);
 
+  // Load conversation from URL on mount
+  useEffect(() => {
+    if (urlConversationId && user?.id) {
+      // Load the conversation if there's a conversationId in the URL
+      // Pass shouldNavigate=false since we're already on the correct URL
+      loadConversation(urlConversationId, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlConversationId, user]);
+
   // Handle search query from landing page
   useEffect(() => {
     const query = searchParams.get('q');
-    if (query) {
+    // Only handle query if there's no conversation ID in the URL
+    if (query && !urlConversationId) {
       handleSendQuery(query);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -444,6 +434,23 @@ export default function AskAlma() {
       return () => document.removeEventListener('click', handleClick);
     }
   }, [mobileConvMenu]);
+
+  // Handle window resize to detect mobile/desktop
+  useEffect(() => {
+    const handleResize = () => {
+      const wasMobile = isMobile;
+      const nowMobile = window.innerWidth < 768;
+      setIsMobile(nowMobile);
+      
+      // Close mobile menu when switching from mobile to desktop
+      if (wasMobile && !nowMobile && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isMobile, mobileMenuOpen]);
 
   // Close category dropdowns when clicking outside
   useEffect(() => {
@@ -494,6 +501,8 @@ export default function AskAlma() {
       // Update conversation ID if this is a new conversation
       if (!conversationId && data.conversation_id) {
         setConversationId(data.conversation_id);
+        // Navigate to the new conversation URL
+        navigate(`/chat/${data.conversation_id}`, { replace: true });
         // Refresh conversations list to show the new conversation
         fetchConversations();
       }
@@ -565,7 +574,7 @@ export default function AskAlma() {
     }
   };
 
-  const loadConversation = async (convId) => {
+  const loadConversation = async (convId, shouldNavigate = true) => {
     try {
       const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/conversations/${convId}`);
@@ -592,6 +601,11 @@ export default function AskAlma() {
       setError(null);
       setLatestMessageIndex(-1); // Don't animate old messages
       setMobileMenuOpen(false); // Close mobile menu after loading conversation
+      
+      // Navigate to conversation URL only if requested (e.g., from sidebar click)
+      if (shouldNavigate && urlConversationId !== convId) {
+        navigate(`/chat/${convId}`);
+      }
     } catch (err) {
       console.error('Error loading conversation:', err);
       // Check if it's a network/CORS error
@@ -610,6 +624,8 @@ export default function AskAlma() {
     setLatestMessageIndex(-1);
     setConversationSearchQuery(""); // Clear search when starting new chat
     setMobileMenuOpen(false); // Close mobile menu after starting new chat
+    // Navigate to /chat without a conversation ID
+    navigate('/chat');
   };
 
   const handleLogout = () => {
@@ -905,9 +921,8 @@ export default function AskAlma() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              // Check current screen size directly
-              const currentlyMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-              if (currentlyMobile) {
+              // On mobile, toggle overlay menu
+              if (isMobile) {
                 setMobileMenuOpen(!mobileMenuOpen);
               } else {
                 // On desktop, toggle sidebar collapse
@@ -916,18 +931,13 @@ export default function AskAlma() {
             }}
             className={`p-2 hover:bg-gray-100 rounded-lg relative ${mobileMenuOpen ? 'z-[70]' : ''}`}
           >
-            {(() => {
-              // Use window.innerWidth directly to avoid stale state during resize
-              const currentlyMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-              
-              if (currentlyMobile) {
-                // On mobile: X when menu is open, Menu when closed
-                return mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />;
-              } else {
-                // On desktop: X when sidebar is open, Menu when collapsed
-                return sidebarCollapsed ? <Menu className="w-6 h-6" /> : <X className="w-6 h-6" />;
-              }
-            })()}
+            {isMobile ? (
+              // On mobile: show Menu when closed, X when open
+              mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />
+            ) : (
+              // On desktop: show Menu when sidebar is collapsed, X when expanded
+              sidebarCollapsed ? <Menu className="w-6 h-6" /> : <X className="w-6 h-6" />
+            )}
           </button>
         </header>
 
