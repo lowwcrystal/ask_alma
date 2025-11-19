@@ -5,6 +5,7 @@ import json
 import re
 from typing import Optional, List, Dict, Any
 import psycopg2
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import uuid
@@ -48,9 +49,9 @@ OLLAMA_MODELS = {
 OPENAI_MODEL = "gpt-4o-mini"  # Which OpenAI model to use
 OLLAMA_MODEL = "llama3.1"     # Which Ollama model to use
 
-TOP_K       = 10                   # how many chunks to retrieve
-MAX_CONTEXT_CHARS = 8000           # safety to avoid overlong prompts
-MAX_HISTORY_MESSAGES = 10          # how many previous messages to include in context
+TOP_K       = 6                    # how many chunks to retrieve (reduced from 10)
+MAX_CONTEXT_CHARS = 5000           # safety to avoid overlong prompts (reduced from 8000)
+MAX_HISTORY_MESSAGES = 6           # how many previous messages to include in context (reduced from 10)
 LLM_TEMPERATURE = 0.2              # 0 = deterministic, 1 = creative
 
 SCHOOL_LABELS = {
@@ -66,18 +67,47 @@ SCHOOL_SOURCE_PATTERNS = {
 }
 
 # -------------------------------
-# Helpers
+# Database Connection Pool
 # -------------------------------
-def get_pg_conn():
-   
-    
-    url = os.getenv("DATABASE_URL")
-    if url:
+_connection_pool = None
+
+def get_connection_pool():
+    """Get or create the connection pool (singleton pattern)."""
+    global _connection_pool
+    if _connection_pool is None:
+        url = os.getenv("DATABASE_URL")
+        if not url:
+            raise SystemExit("Missing DB settings. Set DATABASE_URL in .env")
+        
         if "sslmode=" not in url:
             sep = "&" if "?" in url else "?"
             url = f"{url}{sep}sslmode=require"
-        return psycopg2.connect(url, cursor_factory=RealDictCursor)
-    raise SystemExit("Missing DB settings. Set DATABASE_URL in .env")
+        
+        try:
+            # Create connection pool with 2-10 connections
+            _connection_pool = pool.SimpleConnectionPool(
+                minconn=2,
+                maxconn=10,
+                dsn=url,
+                cursor_factory=RealDictCursor
+            )
+        except Exception as e:
+            raise SystemExit(f"Failed to create connection pool: {e}")
+    
+    return _connection_pool
+
+# -------------------------------
+# Helpers
+# -------------------------------
+def get_pg_conn():
+    """Get a connection from the pool."""
+    conn_pool = get_connection_pool()
+    return conn_pool.getconn()
+
+def release_pg_conn(conn):
+    """Return a connection to the pool."""
+    conn_pool = get_connection_pool()
+    conn_pool.putconn(conn)
 
 # -------------------------------
 # Conversation Management
@@ -558,8 +588,9 @@ def rag_answer(
     cur = conn.cursor()
 
     # Improve ANN recall (IVFFlat): set probes (tune 5-20)
+    # Lower probes = faster but slightly less accurate
     try:
-        cur.execute("set ivfflat.probes = %s;", (probes,))
+        cur.execute("set ivfflat.probes = %s;", (5,))  # Reduced from 10 for speed
     except Exception:
         pass  # if extension/version doesn't support it, ignore
 
@@ -581,8 +612,8 @@ def rag_answer(
         prof1, prof2 = comparison
         print(f"[DEBUG] Detected comparison: {prof1} vs {prof2}")
         
-        # Retrieve TOP_K/2 results for each professor
-        per_prof_limit = TOP_K // 2
+        # Retrieve 3 results for each professor (6 total, optimized for speed)
+        per_prof_limit = 3
         
         prof1_rows = retrieve_for_professor(prof1, embedder, cur, table_name, school_filter, per_prof_limit)
         prof2_rows = retrieve_for_professor(prof2, embedder, cur, table_name, school_filter, per_prof_limit)
@@ -709,7 +740,8 @@ def rag_answer(
             metadata["school_filter_applied"] = school_filter
         save_message(conn, conversation_id, "assistant", answer, metadata)
     
-    conn.close()
+    # Return connection to pool instead of closing
+    release_pg_conn(conn)
 
     return {
         "conversation_id": conversation_id,
