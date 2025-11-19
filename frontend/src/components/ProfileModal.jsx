@@ -165,13 +165,16 @@ export default function ProfileModal({
               {/* Current Photo Preview */}
               <div className="flex items-center gap-4">
                 {imagePreview ? (
-                  <img
-                    src={imagePreview}
-                    alt="Profile preview"
-                    className="w-16 h-16 rounded-full object-cover border"
-                  />
+                  <div className="w-16 h-16 rounded-full overflow-hidden">
+                    <img
+                      src={imagePreview}
+                      alt="Profile preview"
+                      className="w-full h-full object-cover"
+                      style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.2)' }}
+                    />
+                  </div>
                 ) : (
-                  <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm border">
+                  <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">
                     No photo
                   </div>
                 )}
@@ -211,15 +214,18 @@ export default function ProfileModal({
                       setImageError(null);
                     }}
                     disabled={saving}
-                    className={`flex flex-col items-center p-3 border-2 rounded-lg hover:bg-gray-50 transition ${
+                    className={`flex flex-col items-center p-2 border-2 rounded-lg hover:bg-gray-50 transition ${
                       imagePreview === '/Alma_pfp.png' ? 'border-[#003865] bg-blue-50' : 'border-gray-200'
                     }`}
                   >
-                    <img 
-                      src="/Alma_pfp.png" 
-                      alt="Alma" 
-                      className="w-12 h-12 rounded-full object-cover mb-1"
-                    />
+                    <div className="w-16 h-16 rounded-full overflow-hidden mb-1">
+                      <img 
+                        src="/Alma_pfp.png" 
+                        alt="Alma" 
+                        className="w-full h-full object-cover"
+                        style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.2)' }}
+                      />
+                    </div>
                     <span className="text-xs font-medium text-gray-700">Alma</span>
                   </button>
                   <button
@@ -230,15 +236,18 @@ export default function ProfileModal({
                       setImageError(null);
                     }}
                     disabled={saving}
-                    className={`flex flex-col items-center p-3 border-2 rounded-lg hover:bg-gray-50 transition ${
+                    className={`flex flex-col items-center p-2 border-2 rounded-lg hover:bg-gray-50 transition ${
                       imagePreview === '/Roaree_pfp.png' ? 'border-[#003865] bg-blue-50' : 'border-gray-200'
                     }`}
                   >
-                    <img 
-                      src="/Roaree_pfp.png" 
-                      alt="Roaree" 
-                      className="w-12 h-12 rounded-full object-cover mb-1"
-                    />
+                    <div className="w-16 h-16 rounded-full overflow-hidden mb-1">
+                      <img 
+                        src="/Roaree_pfp.png" 
+                        alt="Roaree" 
+                        className="w-full h-full object-cover"
+                        style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.2)' }}
+                      />
+                    </div>
                     <span className="text-xs font-medium text-gray-700">Roaree</span>
                   </button>
                   <button
@@ -249,15 +258,18 @@ export default function ProfileModal({
                       setImageError(null);
                     }}
                     disabled={saving}
-                    className={`flex flex-col items-center p-3 border-2 rounded-lg hover:bg-gray-50 transition ${
+                    className={`flex flex-col items-center p-2 border-2 rounded-lg hover:bg-gray-50 transition ${
                       imagePreview === '/Millie_pfp.png' ? 'border-[#003865] bg-blue-50' : 'border-gray-200'
                     }`}
                   >
-                    <img 
-                      src="/Millie_pfp.png" 
-                      alt="Millie" 
-                      className="w-12 h-12 rounded-full object-cover mb-1"
-                    />
+                    <div className="w-16 h-16 rounded-full overflow-hidden mb-1">
+                      <img 
+                        src="/Millie_pfp.png" 
+                        alt="Millie" 
+                        className="w-full h-full object-cover"
+                        style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.2)' }}
+                      />
+                    </div>
                     <span className="text-xs font-medium text-gray-700">Millie</span>
                   </button>
                 </div>
