@@ -343,7 +343,7 @@ During development, we encountered several technical challenges.
 
 **Challenge**: Finding the right chunk size for document splitting was crucial for both retrieval accuracy and context preservation. Too small chunks lost important context, while too large chunks reduced semantic search precision.
 
-**Approachs**:
+**Approaches**:
 - Experimented with various chunk sizes (200, 500, 1000, 1500 characters)
 - Tested retrieval quality with different chunk sizes
 - Evaluated how chunk boundaries affected course descriptions and requirements
