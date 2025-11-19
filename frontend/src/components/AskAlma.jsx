@@ -284,6 +284,7 @@ export default function AskAlma() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [greeting, setGreeting] = useState('');
   const [expandedCategories, setExpandedCategories] = useState({});
   const [hoveredQuestion, setHoveredQuestion] = useState(null);
@@ -415,6 +416,23 @@ export default function AskAlma() {
       return () => document.removeEventListener('click', handleClick);
     }
   }, [mobileConvMenu]);
+
+  // Handle window resize to detect mobile/desktop
+  useEffect(() => {
+    const handleResize = () => {
+      const wasMobile = isMobile;
+      const nowMobile = window.innerWidth < 768;
+      setIsMobile(nowMobile);
+      
+      // Close mobile menu when switching from mobile to desktop
+      if (wasMobile && !nowMobile && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isMobile, mobileMenuOpen]);
 
   // Close category dropdowns when clicking outside
   useEffect(() => {
@@ -877,7 +895,7 @@ export default function AskAlma() {
             onClick={(e) => {
               e.stopPropagation();
               // On mobile, toggle overlay menu
-              if (window.innerWidth < 768) {
+              if (isMobile) {
                 setMobileMenuOpen(!mobileMenuOpen);
               } else {
                 // On desktop, toggle sidebar collapse
@@ -886,12 +904,12 @@ export default function AskAlma() {
             }}
             className={`p-2 hover:bg-gray-100 rounded-lg relative ${mobileMenuOpen ? 'z-[70]' : ''}`}
           >
-            {mobileMenuOpen ? (
-              <X className="w-6 h-6" />
-            ) : sidebarCollapsed ? (
-              <Menu className="w-6 h-6" />
+            {isMobile ? (
+              // On mobile: show Menu when closed, X when open
+              mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />
             ) : (
-              <X className="w-6 h-6" />
+              // On desktop: show Menu when sidebar is collapsed, X when expanded
+              sidebarCollapsed ? <Menu className="w-6 h-6" /> : <X className="w-6 h-6" />
             )}
           </button>
         </header>
