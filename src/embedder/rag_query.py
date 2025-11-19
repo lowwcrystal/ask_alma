@@ -95,11 +95,32 @@ def create_conversation(conn, user_id=None) -> str:
     return str(conversation_id)
 
 
-def get_school_source_filter(school: Optional[str]) -> Optional[str]:
-    """Return a source filter pattern for the student's school, if available."""
+def get_school_source_filter(school: Optional[str]) -> Optional[tuple]:
+    """
+    Return source filter patterns for the student's school, if available.
+    Returns a tuple: (included_patterns, excluded_patterns)
+    - For Columbia College or SEAS: includes both Columbia sources, excludes Barnard
+    - For Barnard: includes only Barnard, excludes Columbia sources
+    """
     if not school:
         return None
-    return SCHOOL_SOURCE_PATTERNS.get(school)
+    
+    # Group Columbia College and SEAS together
+    if school in ["columbia_college", "columbia_engineering"]:
+        # Include both Columbia sources, exclude Barnard
+        return (
+            [SCHOOL_SOURCE_PATTERNS["columbia_college"], SCHOOL_SOURCE_PATTERNS["columbia_engineering"]],
+            [SCHOOL_SOURCE_PATTERNS["barnard"]]
+        )
+    elif school == "barnard":
+        # Include only Barnard, exclude Columbia sources
+        return (
+            [SCHOOL_SOURCE_PATTERNS["barnard"]],
+            [SCHOOL_SOURCE_PATTERNS["columbia_college"], SCHOOL_SOURCE_PATTERNS["columbia_engineering"]]
+        )
+    
+    # Fallback to original behavior for unknown schools
+    return ([SCHOOL_SOURCE_PATTERNS.get(school)], None)
 
 
 def get_user_profile(conn, user_id: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -232,7 +253,10 @@ def build_prompt(
     
     Be conversational, friendly, and supportive while maintaining accuracy. Always base your answers on the CONTEXT provided below.
     
-    **IMPORTANT FOR SCHOOL-SPECIFIC QUESTIONS**: When a student's profile indicates a specific school (Barnard, Columbia College, SEAS), prioritize and search for information relevant to that school. Look for school-specific requirements, terminology, and course listings in the context.{profile_text}
+    **IMPORTANT FOR SCHOOL-SPECIFIC QUESTIONS**: When a student's profile indicates a specific school, prioritize information accordingly:
+    - For Columbia College or SEAS students: Prioritize information from both Columbia College and SEAS sources (they share many requirements and resources)
+    - For Barnard students: Prioritize information from Barnard-specific sources
+    Look for school-specific requirements, terminology, and course listings in the context.{profile_text}
     
     ## WHEN TO USE CHAT HISTORY:
     **IMPORTANT**: Only reference chat history when the current question is DIRECTLY RELATED to previous conversation.
@@ -366,8 +390,9 @@ def build_prompt(
     - Base ALL answers on the CONTEXT provided below
       - Related requirements or categories that might contain the information
       - School-specific terminology (Barnard, Columbia College, SEAS may use different terms)
-    - **SCHOOL-SPECIFIC PRIORITY**: If the student's profile indicates a specific school (Barnard, Columbia College, SEAS):
-      - Prioritize information from that school's sources in the context
+    - **SCHOOL-SPECIFIC PRIORITY**: If the student's profile indicates a specific school:
+      - For Columbia College or SEAS students: Prioritize information from both Columbia College and SEAS sources (they share many requirements and resources)
+      - For Barnard students: Prioritize information from Barnard-specific sources
       - Use school-specific terminology and requirements
       - If information exists in the context but isn't explicitly labeled, infer from school context
     - Only say "I don't have information about [X]" if you've thoroughly searched the context and truly cannot find it
@@ -455,33 +480,55 @@ def retrieve_for_professor(
     embedder: OpenAIEmbeddings,
     cur,
     table_name: str,
-    school_filter: Optional[str],
+    school_filter: Optional[tuple],
     limit: int = 5
 ) -> List[Dict[str, Any]]:
     """
     Retrieve chunks specifically for a given professor.
+    school_filter is now a tuple: (included_patterns, excluded_patterns)
     """
     # Create a targeted query for this professor
     prof_query = f"Professor {professor_name} teaching style reviews rating"
     prof_vec = embedder.embed_query(prof_query)
     vec_literal = "[" + ",".join(f"{x:.8f}" for x in prof_vec) + "]"
+    prof_pattern = f"%{professor_name}%"
     
     # Search specifically for CULPA sources mentioning this professor
     if school_filter:
-        sql = f"""
-            select
-              id,
-              content,
-              1 - (embedding <=> %s::vector) as similarity,
-              source
-            from {table_name}
-            where (source ILIKE %s OR source ILIKE 'culpa.info%%')
-              and (content ILIKE %s OR source ILIKE %s)
-            order by embedding <=> %s::vector
-            limit %s;
-        """
-        prof_pattern = f"%{professor_name}%"
-        cur.execute(sql, (vec_literal, school_filter, prof_pattern, prof_pattern, vec_literal, limit))
+        included_patterns, excluded_patterns = school_filter
+        
+        if included_patterns:
+            # Build OR conditions for included school sources
+            included_conditions = " OR ".join(["source ILIKE %s"] * len(included_patterns))
+            sql = f"""
+                select
+                  id,
+                  content,
+                  1 - (embedding <=> %s::vector) as similarity,
+                  source
+                from {table_name}
+                where (({included_conditions}) OR source ILIKE 'culpa.info%%')
+                  and (content ILIKE %s OR source ILIKE %s)
+                order by embedding <=> %s::vector
+                limit %s;
+            """
+            params = [vec_literal] + included_patterns + [prof_pattern, prof_pattern, vec_literal, limit]
+            cur.execute(sql, params)
+        else:
+            # Fallback: just search CULPA
+            sql = f"""
+                select
+                  id,
+                  content,
+                  1 - (embedding <=> %s::vector) as similarity,
+                  source
+                from {table_name}
+                where source ILIKE 'culpa.info%%'
+                  and (content ILIKE %s OR source ILIKE %s)
+                order by embedding <=> %s::vector
+                limit %s;
+            """
+            cur.execute(sql, (vec_literal, prof_pattern, prof_pattern, vec_literal, limit))
     else:
         sql = f"""
             select
@@ -494,7 +541,6 @@ def retrieve_for_professor(
             order by embedding <=> %s::vector
             limit %s;
         """
-        prof_pattern = f"%{professor_name}%"
         cur.execute(sql, (vec_literal, prof_pattern, prof_pattern, vec_literal, limit))
     
     return cur.fetchall()
@@ -603,38 +649,80 @@ def rag_answer(
         # Step 1: Get school-specific results + CULPA sources (if school filter exists)
         # IMPORTANT: Always include CULPA (professor reviews) regardless of school
         if school_filter:
-            school_sql = f"""
-                select
-                  id,
-                  content,
-                  1 - (embedding <=> %s::vector) as similarity,
-                  source
-                from {table_name}
-                where (source ILIKE %s OR source ILIKE 'culpa.info%%')
-                order by embedding <=> %s::vector
-                limit %s;
-            """
-            cur.execute(school_sql, (vec_literal, school_filter, vec_literal, TOP_K))
-            school_rows = cur.fetchall()
-            rows.extend(school_rows)
-            existing_ids = {row["id"] for row in rows}
+            included_patterns, excluded_patterns = school_filter
             
-            # Step 2: If we don't have enough school-specific results, fill with general results
-            # This catches other schools' data + any CULPA sources not already retrieved
-            if len(rows) < TOP_K:
-                remaining = TOP_K - len(rows)
-                general_sql = f"""
+            # Build SQL with OR conditions for included patterns
+            if included_patterns:
+                # Create OR conditions for included school sources
+                included_conditions = " OR ".join(["source ILIKE %s"] * len(included_patterns))
+                school_sql = f"""
                     select
                       id,
                       content,
                       1 - (embedding <=> %s::vector) as similarity,
                       source
                     from {table_name}
-                    where (source NOT ILIKE %s OR source ILIKE 'culpa.info%%')
+                    where (({included_conditions}) OR source ILIKE 'culpa.info%%')
                     order by embedding <=> %s::vector
                     limit %s;
                 """
-                cur.execute(general_sql, (vec_literal, school_filter, vec_literal, remaining))
+                params = [vec_literal] + included_patterns + [vec_literal, TOP_K]
+                cur.execute(school_sql, params)
+            else:
+                # Fallback to old behavior if no included patterns
+                school_sql = f"""
+                    select
+                      id,
+                      content,
+                      1 - (embedding <=> %s::vector) as similarity,
+                      source
+                    from {table_name}
+                    where source ILIKE 'culpa.info%%'
+                    order by embedding <=> %s::vector
+                    limit %s;
+                """
+                cur.execute(school_sql, (vec_literal, vec_literal, TOP_K))
+            
+            school_rows = cur.fetchall()
+            rows.extend(school_rows)
+            existing_ids = {row["id"] for row in rows}
+            
+            # Step 2: If we don't have enough school-specific results, fill with general results
+            # This catches other schools' data + any CULPA sources not already retrieved
+            # Exclude the excluded patterns (e.g., Barnard for Columbia students, or Columbia for Barnard students)
+            if len(rows) < TOP_K:
+                remaining = TOP_K - len(rows)
+                if excluded_patterns:
+                    # Build NOT conditions for excluded patterns
+                    excluded_conditions = " AND ".join(["source NOT ILIKE %s"] * len(excluded_patterns))
+                    general_sql = f"""
+                        select
+                          id,
+                          content,
+                          1 - (embedding <=> %s::vector) as similarity,
+                          source
+                        from {table_name}
+                        where ({excluded_conditions} OR source ILIKE 'culpa.info%%')
+                        order by embedding <=> %s::vector
+                        limit %s;
+                    """
+                    params = excluded_patterns + [vec_literal, vec_literal, remaining]
+                    cur.execute(general_sql, params)
+                else:
+                    # No exclusions, get all sources
+                    general_sql = f"""
+                        select
+                          id,
+                          content,
+                          1 - (embedding <=> %s::vector) as similarity,
+                          source
+                        from {table_name}
+                        where source ILIKE 'culpa.info%%'
+                        order by embedding <=> %s::vector
+                        limit %s;
+                    """
+                    cur.execute(general_sql, (vec_literal, vec_literal, remaining))
+                
                 general_rows = cur.fetchall()
                 # Add general results, avoiding duplicates
                 for row in general_rows:
