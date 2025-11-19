@@ -1,7 +1,7 @@
 // src/components/AskAlma.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUp, LogOut, Menu, X, MoreVertical } from "lucide-react";
+import { ArrowUp, Menu, X, MoreVertical } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { categorizedQuestions } from "./askAlmaData";
 import ProfileModal from "./ProfileModal";
@@ -280,6 +280,7 @@ export default function AskAlma() {
   const [editingConvId, setEditingConvId] = useState(null);
   const [editingValue, setEditingValue] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
   const [greeting, setGreeting] = useState('');
   const [expandedCategories, setExpandedCategories] = useState({});
@@ -288,12 +289,34 @@ export default function AskAlma() {
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState(null);
+  const [rotatingPlaceholder, setRotatingPlaceholder] = useState(0);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
+  // Placeholder options that rotate
+  const placeholderOptions = [
+    "Ask me anything about Columbia",
+    "Ask me about registration",
+    "Ask me about the Core Curriculum",
+    "Ask me about professors"
+  ];
 
   // Set random greeting on mount
   useEffect(() => {
     const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
     setGreeting(randomGreeting);
   }, []);
+
+  // Rotate placeholder text
+  useEffect(() => {
+    // Only rotate if input is empty and not focused
+    if (!input && !isInputFocused) {
+      const interval = setInterval(() => {
+        setRotatingPlaceholder((prev) => (prev + 1) % placeholderOptions.length);
+      }, 3000); // Change every 3 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [input, isInputFocused, placeholderOptions.length]);
 
   // Fetch user profile on mount
   useEffect(() => {
@@ -640,7 +663,7 @@ export default function AskAlma() {
 
   return (
     <div className="flex w-screen h-screen bg-almaGray">
-      {/* Mobile overlay backdrop */}
+      {/* Mobile overlay backdrop - covers entire screen including header */}
       {mobileMenuOpen && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
@@ -651,11 +674,14 @@ export default function AskAlma() {
       {/* Sidebar */}
       <div className={`
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0
+        ${sidebarCollapsed ? 'md:-translate-x-full md:w-0' : 'md:translate-x-0 md:w-64'}
         fixed md:relative
-        w-64 bg-gray-100 border-r p-4 flex flex-col
-        z-50 h-full
-        transition-transform duration-300 ease-in-out
+        bg-gray-100 border-r flex flex-col
+        ${sidebarCollapsed ? 'md:p-0 md:border-r-0' : 'p-4'}
+        z-[60] h-full
+        transition-all duration-300 ease-in-out
+        ${mobileMenuOpen ? 'pointer-events-auto' : 'pointer-events-none md:pointer-events-auto'}
+        overflow-hidden
       `}>
         <button 
           onClick={startNewChat}
@@ -761,11 +787,14 @@ export default function AskAlma() {
             className="flex items-center gap-2 w-full hover:bg-gray-200 p-2 rounded-lg transition"
           >
             {profile?.profile_image ? (
-              <img 
-                src={profile.profile_image} 
-                alt="Profile" 
-                className="w-8 h-8 rounded-full object-cover border"
-              />
+              <div className="w-8 h-8 rounded-full overflow-hidden">
+                <img 
+                  src={profile.profile_image} 
+                  alt="Profile" 
+                  className="w-full h-full object-cover"
+                  style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.2)' }}
+                />
+              </div>
             ) : (
               <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-xs font-semibold border">
                 {user?.email?.[0]?.toUpperCase() || 'U'}
@@ -780,17 +809,9 @@ export default function AskAlma() {
       </div>
 
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen">
+      <div className={`flex-1 flex flex-col min-w-0 h-screen transition-all duration-300 ease-in-out ${sidebarCollapsed ? '' : ''} ${mobileMenuOpen ? 'md:pointer-events-auto pointer-events-none overflow-hidden' : ''}`}>
         <header className="flex-shrink-0 border-b p-4 md:p-8 flex items-center justify-between bg-white shadow-sm">
           <div className="flex items-center gap-2 md:gap-4">
-            {/* Mobile hamburger menu - left side */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 hover:bg-gray-100 rounded-lg"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-            
             <img
               src="/AskAlma_Logo.jpg?v=1"
               alt="AskAlma Logo"
@@ -807,14 +828,27 @@ export default function AskAlma() {
             </div>
           </div>
           
-          {/* Desktop logout button */}
+          {/* Hamburger menu - right side (where logout used to be) */}
           <button
-            onClick={handleLogout}
-            className="hidden md:flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-[#003865] hover:bg-gray-50 rounded-lg transition"
-            title="Log out"
+            onClick={(e) => {
+              e.stopPropagation();
+              // On mobile, toggle overlay menu
+              if (window.innerWidth < 768) {
+                setMobileMenuOpen(!mobileMenuOpen);
+              } else {
+                // On desktop, toggle sidebar collapse
+                setSidebarCollapsed(!sidebarCollapsed);
+              }
+            }}
+            className={`p-2 hover:bg-gray-100 rounded-lg relative ${mobileMenuOpen ? 'z-[70]' : ''}`}
           >
-            <LogOut className="w-5 h-5" />
-            <span>Log out</span>
+            {mobileMenuOpen ? (
+              <X className="w-6 h-6" />
+            ) : sidebarCollapsed ? (
+              <Menu className="w-6 h-6" />
+            ) : (
+              <X className="w-6 h-6" />
+            )}
           </button>
         </header>
 
@@ -833,12 +867,14 @@ export default function AskAlma() {
                   {/* Search Input */}
                   <div className="relative mb-3 md:mb-4">
                     <textarea
-                      placeholder="Ask me anything about Columbia..."
+                      placeholder={placeholderOptions[rotatingPlaceholder]}
                       className={`w-full px-3 py-3 pr-12 sm:px-4 sm:py-3 md:px-6 md:py-4 md:pr-14 text-sm sm:text-base md:text-lg bg-gray-50 border-0 rounded-2xl focus:outline-none resize-none ${
                         hoveredQuestion && !input ? 'text-gray-400' : 'text-gray-900'
                       } placeholder-gray-400`}
                       style={{ outline: 'none' }}
                       value={hoveredQuestion && !input ? hoveredQuestion : input}
+                      onFocus={() => setIsInputFocused(true)}
+                      onBlur={() => setIsInputFocused(false)}
                       onChange={(e) => {
                         setInput(e.target.value);
                         e.target.style.height = 'auto';
