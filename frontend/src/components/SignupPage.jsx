@@ -131,6 +131,15 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+      {/* Back to home button - top left */}
+      <button
+        onClick={() => navigate('/')}
+        className="fixed top-4 left-4 flex items-center gap-2 text-gray-600 hover:text-[#003865] transition z-50"
+      >
+        <ArrowLeft className="w-5 h-5" />
+        <span className="text-sm font-medium">Back to home</span>
+      </button>
+
       <div className="w-full max-w-xl">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-semibold text-gray-800">Create an account</h2>
@@ -328,14 +337,6 @@ export default function SignupPage() {
             </Link>
           </p>
         </form>
-
-        <button
-          onClick={() => navigate('/')}
-          className="flex items-center justify-center gap-2 text-gray-600 hover:text-[#003865] mt-6 transition mx-auto"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Back to home</span>
-        </button>
       </div>
     </div>
   );

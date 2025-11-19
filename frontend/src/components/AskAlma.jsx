@@ -282,8 +282,37 @@ export default function AskAlma() {
   const [editingConvId, setEditingConvId] = useState(null);
   const [editingValue, setEditingValue] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    // Initialize based on screen size - default to collapsed on desktop
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768 ? false : false; // Start open on desktop
+    }
+    return false;
+  });
   const [mobileConvMenu, setMobileConvMenu] = useState(null);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+
+  // Detect mobile screen size and handle transitions
+  useEffect(() => {
+    const checkMobile = () => {
+      const wasMobile = isMobile;
+      const nowMobile = window.innerWidth < 768;
+      setIsMobile(nowMobile);
+      
+      // When transitioning from mobile to desktop, close mobile menu
+      if (wasMobile && !nowMobile) {
+        setMobileMenuOpen(false);
+      }
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, [isMobile]);
   const [greeting, setGreeting] = useState('');
   const [expandedCategories, setExpandedCategories] = useState({});
   const [hoveredQuestion, setHoveredQuestion] = useState(null);
@@ -876,8 +905,9 @@ export default function AskAlma() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              // On mobile, toggle overlay menu
-              if (window.innerWidth < 768) {
+              // Check current screen size directly
+              const currentlyMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+              if (currentlyMobile) {
                 setMobileMenuOpen(!mobileMenuOpen);
               } else {
                 // On desktop, toggle sidebar collapse
@@ -886,13 +916,18 @@ export default function AskAlma() {
             }}
             className={`p-2 hover:bg-gray-100 rounded-lg relative ${mobileMenuOpen ? 'z-[70]' : ''}`}
           >
-            {mobileMenuOpen ? (
-              <X className="w-6 h-6" />
-            ) : sidebarCollapsed ? (
-              <Menu className="w-6 h-6" />
-            ) : (
-              <X className="w-6 h-6" />
-            )}
+            {(() => {
+              // Use window.innerWidth directly to avoid stale state during resize
+              const currentlyMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+              
+              if (currentlyMobile) {
+                // On mobile: X when menu is open, Menu when closed
+                return mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />;
+              } else {
+                // On desktop: X when sidebar is open, Menu when collapsed
+                return sidebarCollapsed ? <Menu className="w-6 h-6" /> : <X className="w-6 h-6" />;
+              }
+            })()}
           </button>
         </header>
 
