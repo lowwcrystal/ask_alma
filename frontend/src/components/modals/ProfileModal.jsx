@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { X, LogOut, Loader2 } from 'lucide-react';
-import { ACADEMIC_YEAR_OPTIONS, SCHOOL_OPTIONS } from '../constants/profile';
+import { ACADEMIC_YEAR_OPTIONS, SCHOOL_OPTIONS } from '../../constants/profile';
 
 const parseListInput = (input) => {
   if (!input) return [];

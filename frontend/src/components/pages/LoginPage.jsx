@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import SEO from './SEO';
+import { useAuth } from '../../context/AuthContext';
+import SEO from '../common/SEO';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -56,7 +56,7 @@ export default function LoginPage() {
         description="Login to AskAlma - Your AI Academic Advisor for Columbia University"
         path="/login"
       />
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       {/* Back to home button - top left */}
       <button
         onClick={() => navigate('/')}
