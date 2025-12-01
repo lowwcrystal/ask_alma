@@ -48,9 +48,9 @@ OLLAMA_MODELS = {
 OPENAI_MODEL = "gpt-4o-mini"  # Which OpenAI model to use
 OLLAMA_MODEL = "llama3.1"     # Which Ollama model to use
 
-TOP_K       = 10                   # how many chunks to retrieve
-MAX_CONTEXT_CHARS = 8000           # safety to avoid overlong prompts
-MAX_HISTORY_MESSAGES = 10          # how many previous messages to include in context
+TOP_K       = 6                   # how many chunks to retrieve
+MAX_CONTEXT_CHARS = 5000           # safety to avoid overlong prompts
+MAX_HISTORY_MESSAGES = 6          # how many previous messages to include in context
 LLM_TEMPERATURE = 0.2              # 0 = deterministic, 1 = creative
 
 SCHOOL_LABELS = {

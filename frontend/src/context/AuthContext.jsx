@@ -12,7 +12,9 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Clean up hash fragments on mount (in case of OAuth redirect)
     const cleanupHash = () => {
-      if (window.location.hash) {
+      const hash = window.location.hash;
+      // Only clean up if there's actually a hash fragment with OAuth data
+      if (hash && (hash.includes('access_token') || hash.includes('type=recovery') || hash === '#')) {
         // Wait a bit to ensure Supabase has processed the hash
         setTimeout(() => {
           const path = window.location.pathname || '/chat';
@@ -21,8 +23,8 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    // Immediate cleanup if hash exists (handles empty hash like just "#")
-    if (window.location.hash) {
+    // Immediate cleanup if hash exists (handles OAuth redirects)
+    if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=recovery'))) {
       // Give Supabase time to process, then clean up
       setTimeout(() => {
         const path = window.location.pathname || '/chat';
@@ -54,16 +56,18 @@ export const AuthProvider = ({ children }) => {
           name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User'
         });
         
-        // Clean up OAuth hash fragments from URL
-        setTimeout(() => {
-          const path = window.location.pathname || '/chat';
-          window.history.replaceState(null, '', path);
-          
-          // Redirect to /chat after successful OAuth sign-in if not already there
-          if (window.location.pathname !== '/chat') {
-            window.location.href = '/chat';
-          }
-        }, 100);
+        // Clean up OAuth hash fragments from URL only if there's a hash with OAuth data
+        if (window.location.hash && window.location.hash.includes('access_token')) {
+          setTimeout(() => {
+            const path = window.location.pathname || '/chat';
+            window.history.replaceState(null, '', path);
+            
+            // Redirect to /chat after successful OAuth sign-in if not already on a chat page
+            if (!window.location.pathname.startsWith('/chat')) {
+              window.location.href = '/chat';
+            }
+          }, 100);
+        }
       } else if (session) {
         setIsAuthenticated(true);
         setUser({
