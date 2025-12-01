@@ -49,7 +49,7 @@ export default function SearchInput({
 
       return () => clearInterval(interval);
     }
-  }, [value, isInputFocused, isRotatingPlaceholder, placeholder]);
+  }, [value, isInputFocused, isRotatingPlaceholder, Array.isArray(placeholder) ? placeholder.length : 0]);
 
   const handleFocus = (e) => {
     setIsInputFocused(true);
