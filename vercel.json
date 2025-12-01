@@ -28,7 +28,10 @@
     },
     {
       "src": "/(.*)",
-      "dest": "frontend/build/index.html"
+      "dest": "frontend/build/index.html",
+      "headers": {
+        "Cache-Control": "no-cache, no-store, must-revalidate"
+      }
     }
   ]
 }

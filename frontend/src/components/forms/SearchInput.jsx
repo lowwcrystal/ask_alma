@@ -72,7 +72,7 @@ export default function SearchInput({
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (!disabled && !loading && value.trim()) {
-        onSend();
+        onSend(e); // Pass the event object to onSend
       }
     }
   };
@@ -108,7 +108,7 @@ export default function SearchInput({
         rows={1}
       />
       <button
-        onClick={onSend}
+        onClick={(e) => onSend(e)} // Ensure event is passed for button clicks too
         disabled={isDisabled}
         className={`${buttonClasses} ${
           isDisabled
