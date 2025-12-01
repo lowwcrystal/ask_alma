@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { categorizedQuestions } from '../askAlmaData';
 import CategoryDropdown from '../ui/CategoryDropdown';
-import SEO from '../common/SEO';
 import SearchInput from '../forms/SearchInput';
 import MarkdownText from '../chat/MarkdownText';
 import ThinkingAnimation from '../chat/ThinkingAnimation';
@@ -136,13 +135,6 @@ export default function LandingPage() {
 
   return (
     <>
-      <SEO 
-        title="Home"
-        description="AskAlma is your intelligent AI academic advisor for Columbia University. Get instant answers about courses, registration, Core Curriculum, professors, and more. Free AI assistant for Columbia College, SEAS, and Barnard students."
-        keywords="Columbia University, AI advisor, academic advisor, course registration, Core Curriculum, Columbia College, SEAS, Barnard, course planning, academic help, Columbia courses, professor reviews, major requirements, semester planning, free AI assistant"
-        path="/"
-        type="website"
-      />
       <div className="h-screen bg-almaGray flex flex-col overflow-hidden">
       {/* Header */}
       <header className="flex-shrink-0 w-full px-6 py-4 flex items-center justify-between" role="banner">

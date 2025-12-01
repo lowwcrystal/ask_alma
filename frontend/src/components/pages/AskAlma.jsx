@@ -5,7 +5,6 @@ import { Menu, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { categorizedQuestions } from "../askAlmaData";
 import ProfileModal from "../modals/ProfileModal";
-import SEO from "../common/SEO";
 import Sidebar from "../layout/Sidebar";
 import ChatArea from "../chat/ChatArea";
 import ChatInputBar from "../forms/ChatInputBar";
@@ -378,13 +377,6 @@ export default function AskAlma() {
 
   return (
     <>
-      <SEO 
-        title="Chat"
-        description="Chat with AskAlma - Get instant answers about courses, registration, Core Curriculum, professors, and academic policies for Columbia University students. Your AI academic advisor for Columbia College, SEAS, and Barnard."
-        keywords="Columbia University chat, AI academic advisor, course registration help, Core Curriculum questions, Columbia professor reviews, academic planning, Columbia courses"
-        path="/chat"
-        type="website"
-      />
       <div className="flex w-screen h-screen bg-almaGray">
       {/* Mobile overlay backdrop - covers entire screen including header */}
       {mobileMenuOpen && (
