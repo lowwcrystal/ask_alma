@@ -176,8 +176,8 @@ const SEO = ({ title, description, keywords, image, path, type = 'website' }) =>
     createScript(educationalOrgData);
 
     // FAQ Structured Data (if on landing page)
-    const currentPath = location ? location.pathname : '/';
-    if (currentPath === '/' || currentPath === '') {
+    // Use fullPath which is already in dependency array (derived from location.pathname)
+    if (fullPath === '/' || fullPath === '') {
       const faqData = {
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
