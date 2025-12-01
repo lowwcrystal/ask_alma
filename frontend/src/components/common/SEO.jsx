@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
 const SEO = ({ title, description, keywords, image, path, type = 'website' }) => {
+  // useLocation must be called unconditionally - component is always within Router context
   const location = useLocation();
+  
   const siteUrl = 'https://askalmaai.com';
   const defaultTitle = 'AskAlma - Your AI Academic Advisor for Columbia University';
   const defaultDescription = 'Get instant answers about courses, registration, Core Curriculum, and more. Your intelligent AI academic advisor for Columbia, SEAS, and Barnard students.';
@@ -12,11 +14,16 @@ const SEO = ({ title, description, keywords, image, path, type = 'website' }) =>
   const fullTitle = title ? `${title} | ${defaultTitle}` : defaultTitle;
   const fullDescription = description || defaultDescription;
   const fullImage = image || defaultImage;
-  const fullPath = path || location.pathname;
+  const fullPath = path || (location?.pathname || '/');
   const fullUrl = `${siteUrl}${fullPath}`;
   const fullKeywords = keywords || defaultKeywords;
 
   useEffect(() => {
+    // Safety check: only run in browser environment
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
     // Update document title
     document.title = fullTitle;
 
@@ -169,7 +176,8 @@ const SEO = ({ title, description, keywords, image, path, type = 'website' }) =>
     createScript(educationalOrgData);
 
     // FAQ Structured Data (if on landing page)
-    if (location.pathname === '/' || location.pathname === '') {
+    const currentPath = location ? location.pathname : '/';
+    if (currentPath === '/' || currentPath === '') {
       const faqData = {
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
@@ -215,7 +223,7 @@ const SEO = ({ title, description, keywords, image, path, type = 'website' }) =>
     return () => {
       // Cleanup is handled by React's effect cleanup
     };
-  }, [fullTitle, fullDescription, fullImage, fullUrl, fullKeywords, type, location.pathname]);
+  }, [fullTitle, fullDescription, fullImage, fullUrl, fullKeywords, type, fullPath]);
 
   return null;
 };
