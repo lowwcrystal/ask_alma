@@ -27,6 +27,14 @@ const greetings = [
   "Ready to explore?",
 ];
 
+// Placeholder options that rotate (moved outside component to prevent re-creation on every render)
+const placeholderOptions = [
+  "Ask me anything about Columbia",
+  "Ask me about registration",
+  "Ask me about the Core Curriculum",
+  "Ask me about professors"
+];
+
 // Main
 export default function AskAlma() {
   const [messages, setMessages] = useState([]);
@@ -64,14 +72,6 @@ export default function AskAlma() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState(null);
   const [conversationSearchQuery, setConversationSearchQuery] = useState("");
-
-  // Placeholder options that rotate
-  const placeholderOptions = [
-    "Ask me anything about Columbia",
-    "Ask me about registration",
-    "Ask me about the Core Curriculum",
-    "Ask me about professors"
-  ];
 
   // Set random greeting on mount
   useEffect(() => {

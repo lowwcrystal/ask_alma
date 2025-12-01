@@ -36,6 +36,7 @@ export default function SearchInput({
 
   // Handle rotating placeholders if placeholder is an array
   const isRotatingPlaceholder = Array.isArray(placeholder);
+  const placeholderLength = isRotatingPlaceholder ? placeholder.length : 0;
   const placeholderText = isRotatingPlaceholder 
     ? placeholder[rotatingPlaceholder] 
     : placeholder;
@@ -44,12 +45,12 @@ export default function SearchInput({
   useEffect(() => {
     if (isRotatingPlaceholder && !value && !isInputFocused) {
       const interval = setInterval(() => {
-        setRotatingPlaceholder((prev) => (prev + 1) % placeholder.length);
+        setRotatingPlaceholder((prev) => (prev + 1) % placeholderLength);
       }, 3000); // Change every 3 seconds
 
       return () => clearInterval(interval);
     }
-  }, [value, isInputFocused, isRotatingPlaceholder, placeholder]);
+  }, [value, isInputFocused, isRotatingPlaceholder, placeholderLength]);
 
   const handleFocus = (e) => {
     setIsInputFocused(true);
