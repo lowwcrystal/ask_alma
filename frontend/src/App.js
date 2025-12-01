@@ -2,14 +2,14 @@
 import { useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
+import ProtectedRoute from './components/common/ProtectedRoute';
 import "./index.css"; // make sure Tailwind styles are applied
 
 // Lazy load components for code splitting
-const LandingPage = lazy(() => import('./components/LandingPage'));
-const LoginPage = lazy(() => import('./components/LoginPage'));
-const SignupPage = lazy(() => import('./components/SignupPage'));
-const AskAlma = lazy(() => import('./components/AskAlma'));
+const LandingPage = lazy(() => import('./components/pages/LandingPage'));
+const LoginPage = lazy(() => import('./components/pages/LoginPage'));
+const SignupPage = lazy(() => import('./components/pages/SignupPage'));
+const AskAlma = lazy(() => import('./components/pages/AskAlma'));
 
 // Loading fallback component
 const LoadingFallback = () => (

@@ -137,26 +137,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signInWithGoogle = async () => {
-    // Determine the correct redirect URL
-    // Always use production domain (askalmaai.com) for OAuth redirects
-    // This ensures OAuth callbacks work even if accessed via vercel.app preview URLs
-    let redirectUrl;
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      // Check if we're on production domain or any Vercel deployment
-      // Always redirect to production domain for OAuth to avoid 404s
-      if (hostname === 'askalmaai.com' || 
-          hostname.includes('askalmaai.com') || 
-          hostname.includes('vercel.app')) {
-        redirectUrl = 'https://askalmaai.com';
-      } else {
-        // Development (localhost)
-        redirectUrl = window.location.origin;
-      }
-    } else {
-      // Server-side fallback - always use production
-      redirectUrl = process.env.REACT_APP_SITE_URL || 'https://askalmaai.com';
-    }
+    // Use the current origin for redirect - this matches what Supabase expects
+    // Make sure the current URL is whitelisted in Supabase Dashboard
+    const redirectUrl = typeof window !== 'undefined' 
+      ? window.location.origin 
+      : (process.env.REACT_APP_SITE_URL || 'https://askalmaai.com');
     
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
