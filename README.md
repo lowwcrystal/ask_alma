@@ -48,8 +48,8 @@ The system can answer questions about:
 - **State Management**: React Context API for authentication state
 - **Code Splitting**: Lazy loading for optimized performance
 
-### Backend (Flask API)
-- **Framework**: Flask with CORS support
+### Backend (FastAPI)
+- **Framework**: FastAPI with Starlette CORS middleware (Uvicorn locally)
 - **RAG System**: 
   - Semantic search using pgvector
   - Context retrieval from course bulletins and student reviews
@@ -78,8 +78,8 @@ ask_alma/
 │   │   ├── lib/             # Utilities (Supabase client)
 │   │   └── constants/       # Configuration constants
 │   └── package.json
-├── api/                      # Flask backend API
-│   └── app.py               # Main Flask application
+├── api/                      # FastAPI backend API
+│   └── app.py               # Main ASGI application
 ├── src/
 │   ├── embedder/            # RAG system
 │   │   ├── rag_query.py     # Query processing
@@ -236,7 +236,7 @@ The core retrieval and generation system was built next:
 
 ### Phase 3: Backend API Development
 
-The Flask API was developed to connect the frontend to the RAG system:
+The HTTP API was developed to connect the frontend to the RAG system:
 
 1. **Core Endpoints**
    - `/api/chat` - Main chat interface with RAG integration
@@ -292,7 +292,7 @@ The React frontend was built to provide a user-friendly interface:
 The final phase involved connecting all components:
 
 1. **API Integration**
-   - Connected frontend to Flask API endpoints
+   - Connected frontend to API endpoints
    - Implemented error handling and retry logic
    - Added loading states and user feedback
    - Configured CORS for development and production
@@ -371,7 +371,7 @@ During development, we encountered several technical challenges.
 3. **API Optimization**:
    - Implemented batch processing for embedding uploads
    - Added async processing where possible
-   - Optimized Flask route handlers to minimize overhead
+   - Optimized API route handlers to minimize overhead
 
 4. **Frontend Optimizations**:
    - Added loading states and typing animations to improve perceived performance
@@ -434,7 +434,7 @@ During development, we encountered several technical challenges.
 The project is configured for deployment on Vercel:
 
 - **Frontend**: Static build served by Vercel
-- **Backend**: Flask API deployed as Vercel serverless functions
+- **Backend**: FastAPI (ASGI) deployed as Vercel serverless functions
 - **Database**: Supabase (hosted PostgreSQL)
 
 See `vercel.json` for deployment configuration.
@@ -496,8 +496,8 @@ POST /api/profile  # Create or update
 - Lucide React (icons)
 
 ### Backend
-- Flask
-- Flask-CORS
+- FastAPI
+- Uvicorn
 - OpenAI API
 - LangChain
 - psycopg2 (PostgreSQL)

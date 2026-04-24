@@ -1,40 +1,49 @@
 """
-Flask API for AskAlma RAG System
-Connects React frontend to the conversation-enabled RAG backend
+FastAPI application for AskAlma RAG System.
+Connects React frontend to the conversation-enabled RAG backend.
 """
 
-from flask import Flask, request, jsonify, send_from_directory, make_response
-from flask_cors import CORS
-import sys
 import os
+import sys
+import traceback
+from pathlib import Path
+from typing import Any, List, Optional
+
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
-from typing import List
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 
 # Load .env from src/embedder/.env before importing rag_query
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env_path = os.path.join(project_root, 'src', 'embedder', '.env')
+env_path = os.path.join(project_root, "src", "embedder", ".env")
 if os.path.exists(env_path):
     load_dotenv(env_path, override=True)
 else:
     load_dotenv(override=True)
 
-# Add parent directory to path to import rag_query
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from src.embedder.rag_query import rag_answer, get_conversation_history, get_pg_conn
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from src.embedder.rag_query import (  # noqa: E402
+    get_conversation_history,
+    get_pg_conn,
+    rag_answer,
+)
 
-app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
-# Enable CORS for React frontend with explicit origins
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["http://localhost:3000", "http://127.0.0.1:3000", "*"],
-        "methods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+BUILD_DIR = Path(__file__).resolve().parent.parent / "frontend" / "build"
+
+app = FastAPI(title="AskAlma API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 
-def _normalize_string_list(value) -> List[str]:
+def _normalize_string_list(value: Any) -> List[str]:
     """
     Coerce incoming value into a clean list of non-empty strings.
     Supports comma-separated strings, iterables, or None.
@@ -57,172 +66,152 @@ def _normalize_string_list(value) -> List[str]:
     return [text] if text else []
 
 
-def _serialize_profile(row):
+def _serialize_profile(row: Any) -> Optional[dict]:
     """Convert database row into JSON-friendly profile payload."""
     if not row:
         return None
-    
-    # Handle both dict (RealDictCursor) and tuple (regular cursor) formats
+
     if isinstance(row, dict):
         return {
-            'user_id': row.get('user_id'),
-            'school': row.get('school'),
-            'academic_year': row.get('academic_year'),
-            'major': row.get('major'),
-            'minors': row.get('minors') or [],
-            'classes_taken': row.get('classes_taken') or [],
-            'profile_image': row.get('profile_image'),
-            'created_at': row.get('created_at').isoformat() if row.get('created_at') else None,
-            'updated_at': row.get('updated_at').isoformat() if row.get('updated_at') else None,
+            "user_id": row.get("user_id"),
+            "school": row.get("school"),
+            "academic_year": row.get("academic_year"),
+            "major": row.get("major"),
+            "minors": row.get("minors") or [],
+            "classes_taken": row.get("classes_taken") or [],
+            "profile_image": row.get("profile_image"),
+            "created_at": row.get("created_at").isoformat()
+            if row.get("created_at")
+            else None,
+            "updated_at": row.get("updated_at").isoformat()
+            if row.get("updated_at")
+            else None,
         }
-    else:
-        # Handle tuple format
-        columns = ['user_id', 'school', 'academic_year', 'major', 'minors', 'classes_taken', 'profile_image', 'created_at', 'updated_at']
-        row_dict = dict(zip(columns, row))
-        return {
-            'user_id': row_dict.get('user_id'),
-            'school': row_dict.get('school'),
-            'academic_year': row_dict.get('academic_year'),
-            'major': row_dict.get('major'),
-            'minors': row_dict.get('minors') or [],
-            'classes_taken': row_dict.get('classes_taken') or [],
-            'profile_image': row_dict.get('profile_image'),
-            'created_at': row_dict.get('created_at').isoformat() if row_dict.get('created_at') else None,
-            'updated_at': row_dict.get('updated_at').isoformat() if row_dict.get('updated_at') else None,
-        }
-
-
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'ok',
-        'message': 'AskAlma API is running'
-    })
-
-
-@app.route('/api/chat', methods=['POST'])
-def chat():
-    """
-    Main chat endpoint
-    
-    Request body:
-    {
-        "question": "What are the core classes?",
-        "conversation_id": "uuid-string" (optional - null for new conversation),
-        "user_id": "user-uuid" (optional - Supabase user ID)
+    columns = [
+        "user_id",
+        "school",
+        "academic_year",
+        "major",
+        "minors",
+        "classes_taken",
+        "profile_image",
+        "created_at",
+        "updated_at",
+    ]
+    row_dict = dict(zip(columns, row))
+    return {
+        "user_id": row_dict.get("user_id"),
+        "school": row_dict.get("school"),
+        "academic_year": row_dict.get("academic_year"),
+        "major": row_dict.get("major"),
+        "minors": row_dict.get("minors") or [],
+        "classes_taken": row_dict.get("classes_taken") or [],
+        "profile_image": row_dict.get("profile_image"),
+        "created_at": row_dict.get("created_at").isoformat()
+        if row_dict.get("created_at")
+        else None,
+        "updated_at": row_dict.get("updated_at").isoformat()
+        if row_dict.get("updated_at")
+        else None,
     }
-    
-    Response:
-    {
-        "conversation_id": "uuid-string",
-        "answer": "The core classes include...",
-        "sources": [
-            {
-                "id": "abc123",
-                "similarity": 0.85,
-                "content": "..."
-            }
-        ],
-        "model": "openai:gpt-4o-mini"
-    }
-    """
+
+
+def _safe_file_under_build(rel_path: str) -> Optional[Path]:
+    """Resolve rel_path under BUILD_DIR; return path if it is a file, else None."""
+    if not rel_path or ".." in rel_path:
+        return None
+    candidate = (BUILD_DIR / rel_path).resolve()
     try:
-        data = request.json
-        question = data.get('question')
-        conversation_id = data.get('conversation_id')  # None for new conversation
-        user_id = data.get('user_id')  # Supabase user ID (optional)
-        
+        candidate.relative_to(BUILD_DIR.resolve())
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
+
+
+def _cache_control_for_asset(path: str) -> str:
+    if path.endswith(
+        (".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff", ".woff2")
+    ):
+        return "public, max-age=31536000, immutable"
+    if path.endswith(".html"):
+        return "no-cache, no-store, must-revalidate"
+    return ""
+
+
+class ChatBody(BaseModel):
+    question: Optional[str] = None
+    conversation_id: Optional[str] = None
+    user_id: Optional[str] = None
+
+
+class ProfileUpsertBody(BaseModel):
+    user_id: str
+    school: Optional[str] = None
+    academic_year: Optional[str] = None
+    major: Optional[str] = None
+    minors: Optional[Any] = None
+    classes_taken: Optional[Any] = None
+    profile_image: Optional[str] = None
+
+
+class ConversationPatchBody(BaseModel):
+    title: Optional[str] = None
+
+
+@app.get("/api/health")
+def health_check():
+    """Health check endpoint."""
+    return {"status": "ok", "message": "AskAlma API is running"}
+
+
+@app.post("/api/chat")
+def chat(body: ChatBody):
+    """Main chat endpoint (RAG)."""
+    try:
+        question = body.question
         if not question:
-            return jsonify({'error': 'Question is required'}), 400
-        
-        # Call the RAG system
+            return JSONResponse(
+                status_code=400, content={"error": "Question is required"}
+            )
+
         result = rag_answer(
             question=question,
-            conversation_id=conversation_id,
-            user_id=user_id,
-            save_to_db=True
+            conversation_id=body.conversation_id,
+            user_id=body.user_id,
+            save_to_db=True,
         )
-        
-        # Format response for frontend
-        response = {
-            'conversation_id': result['conversation_id'],
-            'answer': result['answer'],
-            'sources': [
+
+        return {
+            "conversation_id": result["conversation_id"],
+            "answer": result["answer"],
+            "sources": [
                 {
-                    'id': match['id'],
-                    'similarity': float(match['similarity']),
-                    'content': match['content'][:200] + '...'  # Preview only
+                    "id": match["id"],
+                    "similarity": float(match["similarity"]),
+                    "content": match["content"][:200] + "...",
                 }
-                for match in result['matches'][:5]  # Top 5 sources
+                for match in result["matches"][:5]
             ],
-            'model': result['used_model_llm']
+            "model": result["used_model_llm"],
         }
-        
-        return jsonify(response)
-    
     except Exception as e:
-        import traceback
         error_trace = traceback.format_exc()
         print(f"Error in /api/chat: {e}")
         print(f"Full traceback:\n{error_trace}")
-        return jsonify({'error': str(e), 'traceback': error_trace}), 500
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "traceback": error_trace},
+        )
 
 
-@app.route('/api/conversations/<conversation_id>', methods=['GET'])
-def get_conversation(conversation_id):
-    """
-    Get conversation history
-    
-    Response:
-    {
-        "conversation_id": "uuid",
-        "messages": [
-            {
-                "role": "user",
-                "content": "What are the core classes?",
-                "created_at": "2025-01-15T10:30:00"
-            },
-            {
-                "role": "assistant", 
-                "content": "The core classes include...",
-                "created_at": "2025-01-15T10:30:05"
-            }
-        ]
-    }
-    """
-    try:
-        conn = get_pg_conn()
-        history = get_conversation_history(conn, conversation_id)
-        conn.close()
-        
-        # Format messages for frontend
-        messages = [
-            {
-                'role': msg['role'],
-                'content': msg['content'],
-                'created_at': msg['created_at'].isoformat() if msg['created_at'] else None
-            }
-            for msg in history
-        ]
-        
-        return jsonify({
-            'conversation_id': conversation_id,
-            'messages': messages
-        })
-    
-    except Exception as e:
-        print(f"Error in /api/conversations: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/profile/<user_id>', methods=['GET'])
-def get_user_profile(user_id):
+@app.get("/api/profile/{user_id}")
+def get_user_profile(user_id: str):
     """Retrieve the stored academic profile for a Supabase user."""
     try:
         conn = get_pg_conn()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             SELECT user_id,
                    school,
                    academic_year,
@@ -234,48 +223,49 @@ def get_user_profile(user_id):
                    updated_at
             FROM user_profiles
             WHERE user_id = %s;
-        """, (user_id,))
+            """,
+            (user_id,),
+        )
         row = cur.fetchone()
         cur.close()
         conn.close()
 
         if not row:
-            return jsonify({'error': 'Profile not found'}), 404
+            return JSONResponse(status_code=404, content={"error": "Profile not found"})
 
         serialized = _serialize_profile(row)
         if not serialized:
-            return jsonify({'error': 'Failed to serialize profile'}), 500
+            return JSONResponse(
+                status_code=500, content={"error": "Failed to serialize profile"}
+            )
 
-        return jsonify(serialized)
-
+        return serialized
     except Exception as e:
-        import traceback
         error_trace = traceback.format_exc()
         print(f"Error fetching profile for user_id={user_id}: {e}")
         print(f"Traceback: {error_trace}")
-        return jsonify({'error': str(e), 'traceback': error_trace}), 500
+        return JSONResponse(
+            status_code=500, content={"error": str(e), "traceback": error_trace},
+        )
 
 
-@app.route('/api/profile', methods=['POST', 'PUT'])
-def upsert_user_profile():
+@app.post("/api/profile")
+@app.put("/api/profile")
+def upsert_user_profile(body: ProfileUpsertBody):
     """Create or update a user's academic profile details."""
     try:
-        data = request.json or {}
-        user_id = data.get('user_id')
+        if not body.user_id:
+            return JSONResponse(
+                status_code=400, content={"error": "user_id is required"}
+            )
 
-        if not user_id:
-            return jsonify({'error': 'user_id is required'}), 400
-
-        school = data.get('school')
-        academic_year = data.get('academic_year')
-        major = data.get('major')
-        minors = _normalize_string_list(data.get('minors'))
-        classes_taken = _normalize_string_list(data.get('classes_taken'))
-        profile_image = data.get('profile_image')
+        minors = _normalize_string_list(body.minors)
+        classes_taken = _normalize_string_list(body.classes_taken)
 
         conn = get_pg_conn()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO user_profiles (user_id, school, academic_year, major, minors, classes_taken, profile_image)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (user_id)
@@ -288,51 +278,42 @@ def upsert_user_profile():
                 profile_image = EXCLUDED.profile_image,
                 updated_at = NOW()
             RETURNING user_id, school, academic_year, major, minors, classes_taken, profile_image, created_at, updated_at;
-        """, (user_id, school, academic_year, major, minors, classes_taken, profile_image))
+            """,
+            (
+                body.user_id,
+                body.school,
+                body.academic_year,
+                body.major,
+                minors,
+                classes_taken,
+                body.profile_image,
+            ),
+        )
         profile = cur.fetchone()
         conn.commit()
         cur.close()
         conn.close()
 
-        return jsonify(_serialize_profile(profile))
-
+        return _serialize_profile(profile)
     except Exception as e:
-        print(f"Error saving profile for user_id={data.get('user_id')}: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"Error saving profile for user_id={body.user_id}: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.route('/api/conversations', methods=['GET'])
-def list_conversations():
-    """
-    List recent conversations for a specific user
-    
-    Query Parameters:
-        user_id: (optional) Supabase user ID to filter conversations
-    
-    Response:
-    {
-        "conversations": [
-            {
-                "id": "uuid",
-                "title": "What are the core classes?",
-                "updated_at": "2025-01-15T10:30:00",
-                "message_count": 6
-            }
-        ]
-    }
-    """
+@app.get("/api/conversations")
+def list_conversations(user_id: Optional[str] = Query(None)):
+    """List recent conversations for a specific user."""
     try:
-        user_id = request.args.get('user_id')  # Get user_id from query params
         print(f"Fetching conversations for user_id: {user_id}")
-        
+
         conn = get_pg_conn()
         print(f"Database connection established: {conn is not None}")
         cur = conn.cursor()
-        
-        # Filter by user_id if provided
+
         if user_id:
-            cur.execute("""
-                SELECT 
+            cur.execute(
+                """
+                SELECT
                     c.id,
                     c.title,
                     c.updated_at,
@@ -343,11 +324,13 @@ def list_conversations():
                 GROUP BY c.id, c.title, c.updated_at
                 ORDER BY c.updated_at DESC
                 LIMIT 20;
-            """, (user_id,))
+                """,
+                (user_id,),
+            )
         else:
-            # No user_id provided - return all conversations (for backwards compatibility)
-            cur.execute("""
-                SELECT 
+            cur.execute(
+                """
+                SELECT
                     c.id,
                     c.title,
                     c.updated_at,
@@ -357,72 +340,60 @@ def list_conversations():
                 GROUP BY c.id, c.title, c.updated_at
                 ORDER BY c.updated_at DESC
                 LIMIT 20;
-            """)
-        
+                """
+            )
+
         conversations = cur.fetchall()
         print(f"Found {len(conversations)} conversations")
         cur.close()
         conn.close()
-        
-        # Format for frontend
+
         result = [
             {
-                'id': str(conv['id']),
-                'title': conv['title'] or 'Untitled Conversation',
-                'updated_at': conv['updated_at'].isoformat() if conv['updated_at'] else None,
-                'message_count': conv['message_count']
+                "id": str(conv["id"]),
+                "title": conv["title"] or "Untitled Conversation",
+                "updated_at": conv["updated_at"].isoformat()
+                if conv["updated_at"]
+                else None,
+                "message_count": conv["message_count"],
             }
             for conv in conversations
         ]
-        
-        return jsonify({'conversations': result})
-    
+
+        return {"conversations": result}
     except Exception as e:
-        import traceback
         print(f"Error in /api/conversations: {e}")
         print(traceback.format_exc())
-        return jsonify({'error': f'Failed to fetch conversations: {str(e)}'}), 500
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to fetch conversations: {str(e)}"},
+        )
 
 
-@app.route('/api/conversations/search', methods=['GET'])
-def search_conversations():
-    """
-    Search conversations by title or message content
-    
-    Query Parameters:
-        user_id: Supabase user ID to filter conversations
-        query: Search query string
-    
-    Response:
-    {
-        "conversations": [
-            {
-                "id": "uuid",
-                "title": "What are the core classes?",
-                "updated_at": "2025-01-15T10:30:00",
-                "message_count": 6
-            }
-        ]
-    }
-    """
+@app.get("/api/conversations/search")
+def search_conversations(
+    user_id: Optional[str] = Query(None),
+    q: str = Query("", alias="query"),
+):
+    """Search conversations by title or message content."""
     try:
-        user_id = request.args.get('user_id')
-        search_query = request.args.get('query', '').strip()
-        
+        search_query = (q or "").strip()
+
         if not user_id:
-            return jsonify({'error': 'user_id is required'}), 400
-        
+            return JSONResponse(
+                status_code=400, content={"error": "user_id is required"}
+            )
+
         if not search_query:
-            return jsonify({'conversations': []}), 200
-        
+            return {"conversations": []}
+
         conn = get_pg_conn()
         cur = conn.cursor()
-        
-        # Search in both conversation titles and message content
-        # Use ILIKE for case-insensitive search
-        search_pattern = f'%{search_query}%'
-        
-        cur.execute("""
+
+        search_pattern = f"%{search_query}%"
+
+        cur.execute(
+            """
             SELECT DISTINCT
                 c.id,
                 c.title,
@@ -438,143 +409,167 @@ def search_conversations():
             GROUP BY c.id, c.title, c.updated_at
             ORDER BY c.updated_at DESC
             LIMIT 50;
-        """, (user_id, search_pattern, search_pattern))
-        
+            """,
+            (user_id, search_pattern, search_pattern),
+        )
+
         conversations = cur.fetchall()
         cur.close()
         conn.close()
-        
-        # Format for frontend
+
         result = [
             {
-                'id': str(conv['id']),
-                'title': conv['title'] or 'Untitled Conversation',
-                'updated_at': conv['updated_at'].isoformat() if conv['updated_at'] else None,
-                'message_count': conv['message_count']
+                "id": str(conv["id"]),
+                "title": conv["title"] or "Untitled Conversation",
+                "updated_at": conv["updated_at"].isoformat()
+                if conv["updated_at"]
+                else None,
+                "message_count": conv["message_count"],
             }
             for conv in conversations
         ]
-        
-        return jsonify({'conversations': result})
-    
+
+        return {"conversations": result}
     except Exception as e:
-        import traceback
         print(f"Error in /api/conversations/search: {e}")
         print(traceback.format_exc())
-        return jsonify({'error': f'Failed to search conversations: {str(e)}'}), 500
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to search conversations: {str(e)}"},
+        )
 
 
-@app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
-def delete_conversation(conversation_id):
-    """Delete a conversation"""
+@app.get("/api/conversations/{conversation_id}")
+def get_conversation(conversation_id: str):
+    """Get conversation history."""
+    try:
+        conn = get_pg_conn()
+        history = get_conversation_history(conn, conversation_id)
+        conn.close()
+
+        messages = [
+            {
+                "role": msg["role"],
+                "content": msg["content"],
+                "created_at": msg["created_at"].isoformat()
+                if msg["created_at"]
+                else None,
+            }
+            for msg in history
+        ]
+
+        return {"conversation_id": conversation_id, "messages": messages}
+    except Exception as e:
+        print(f"Error in /api/conversations: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.delete("/api/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str):
+    """Delete a conversation."""
     try:
         conn = get_pg_conn()
         cur = conn.cursor()
-        
+
         cur.execute("DELETE FROM conversations WHERE id = %s;", (conversation_id,))
         conn.commit()
-        
+
         deleted = cur.rowcount > 0
         cur.close()
         conn.close()
-        
+
         if deleted:
-            return jsonify({'success': True, 'message': 'Conversation deleted'})
-        else:
-            return jsonify({'error': 'Conversation not found'}), 404
-    
+            return {"success": True, "message": "Conversation deleted"}
+        return JSONResponse(status_code=404, content={"error": "Conversation not found"})
     except Exception as e:
         print(f"Error deleting conversation: {e}")
-        return jsonify({'error': str(e)}), 500
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.route('/api/conversations/<conversation_id>', methods=['PATCH'])
-def update_conversation(conversation_id):
-    """Update a conversation (e.g., rename)"""
+@app.patch("/api/conversations/{conversation_id}")
+def update_conversation(conversation_id: str, body: ConversationPatchBody):
+    """Update a conversation (e.g., rename)."""
     try:
-        data = request.json
-        title = data.get('title')
-        
+        title = body.title
+
         if not title or not title.strip():
-            return jsonify({'error': 'Title is required'}), 400
-        
+            return JSONResponse(status_code=400, content={"error": "Title is required"})
+
         conn = get_pg_conn()
         cur = conn.cursor()
-        
-        cur.execute("""
-            UPDATE conversations 
+
+        cur.execute(
+            """
+            UPDATE conversations
             SET title = %s
             WHERE id = %s
             RETURNING id, title;
-        """, (title.strip(), conversation_id))
-        
+            """,
+            (title.strip(), conversation_id),
+        )
+
         updated = cur.fetchone()
         conn.commit()
         cur.close()
         conn.close()
-        
+
         if updated:
-            return jsonify({
-                'success': True,
-                'conversation': {
-                    'id': updated['id'],
-                    'title': updated['title']
-                }
-            })
-        else:
-            return jsonify({'error': 'Conversation not found'}), 404
-    
+            return {
+                "success": True,
+                "conversation": {"id": updated["id"], "title": updated["title"]},
+            }
+        return JSONResponse(status_code=404, content={"error": "Conversation not found"})
     except Exception as e:
         print(f"Error updating conversation: {e}")
-        return jsonify({'error': str(e)}), 500
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-# Serve React App (catch-all route must be last)
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve(path):
-    """Serve React frontend with optimized caching"""
-    if path and os.path.exists(os.path.join(app.static_folder, path)):
-        response = send_from_directory(app.static_folder, path)
-        
-        # Add cache headers for static assets
-        if path.endswith(('.js', '.css', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2')):
-            # Cache static assets for 1 year (with versioning in filename)
-            response.cache_control.max_age = 31536000
-            response.cache_control.public = True
-            response.cache_control.immutable = True
-        elif path.endswith('.html'):
-            # Don't cache HTML files
-            response.cache_control.no_cache = True
-            response.cache_control.no_store = True
-            response.cache_control.must_revalidate = True
-        
-        return response
-    else:
-        # Don't cache index.html
-        response = send_from_directory(app.static_folder, 'index.html')
-        response.cache_control.no_cache = True
-        response.cache_control.no_store = True
-        response.cache_control.must_revalidate = True
-        return response
+@app.get("/{full_path:path}")
+def serve_frontend(full_path: str):
+    """Serve React production build with caching similar to the previous Flask setup."""
+    if full_path.startswith("api"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if not BUILD_DIR.is_dir():
+        raise HTTPException(
+            status_code=503,
+            detail="Frontend build not found. Run the frontend build first.",
+        )
+
+    if full_path:
+        file_path = _safe_file_under_build(full_path)
+        if file_path is not None:
+            cc = _cache_control_for_asset(full_path)
+            headers = {"Cache-Control": cc} if cc else {}
+            return FileResponse(file_path, headers=headers)
+
+    index_path = BUILD_DIR / "index.html"
+    if not index_path.is_file():
+        raise HTTPException(status_code=503, detail="index.html not found in frontend build.")
+
+    return FileResponse(
+        index_path,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
-if __name__ == '__main__':
-    print("\n" + "="*60)
-    print("🎓 AskAlma API Server Starting...")
-    print("="*60)
+if __name__ == "__main__":
+    import uvicorn
+
+    print("\n" + "=" * 60)
+    print("🎓 AskAlma API Server Starting (FastAPI + Uvicorn)...")
+    print("=" * 60)
     print("📍 API will be available at: http://localhost:5001")
     print("📡 Endpoints:")
     print("   GET    /api/health")
     print("   POST   /api/chat")
     print("   GET    /api/conversations")
+    print("   GET    /api/conversations/search")
     print("   GET    /api/conversations/<id>")
     print("   PATCH  /api/conversations/<id>")
     print("   DELETE /api/conversations/<id>")
     print("   GET    /api/profile/<user_id>")
     print("   POST   /api/profile")
-    print("="*60 + "\n")
-    
-    # Run the Flask server (port 5001 to avoid conflict with macOS AirPlay)
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    print("=" * 60 + "\n")
 
+    uvicorn.run(app, host="0.0.0.0", port=5001)
