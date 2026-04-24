@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start the Flask API backend
+# Start the FastAPI backend (Uvicorn)
 
 echo "=================================="
 echo "🚀 Starting AskAlma Backend API..."
@@ -19,8 +19,7 @@ fi
 echo "📦 Installing Python dependencies..."
 python3 -m pip install --user -q -r requirements.txt
 
-# Start the Flask server
-echo "🎓 Starting Flask API server on http://localhost:5001"
+echo "🎓 Starting FastAPI (Uvicorn) on http://localhost:5001"
 echo ""
 python3 api/app.py
 
