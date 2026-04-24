@@ -267,10 +267,9 @@ if __name__ == "__main__":
     # Load environment variables (OPENAI_API_KEY)
     load_dotenv()
     
-    # Path to the JSONL files (relative to embedder.py location)
-    # embedder.py is in: src/embedder/embedder.py
-    # JSONL files are in the root directory
-    base_path = os.path.join(os.path.dirname(__file__), "..", "..")
+    # embedder.py lives in: backend/scripts/embedder/embedder.py
+    # JSONL files are expected in the repo root (3 levels up).
+    base_path = os.path.join(os.path.dirname(__file__), "..", "..", "..")
     
     jsonl_files = [
         os.path.join(base_path, "chunked_all_bulletins.jsonl"),

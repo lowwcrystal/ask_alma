@@ -17,10 +17,12 @@ ENV/
 /venv
 
 # Embeddings output (too large for git)
-src/embedder/emb_out/*.npy
-src/embedder/emb_out/*.meta.tsv
-src/embedder/embeddings/emb_out/*.npy
-src/embedder/embeddings/emb_out/*.meta.tsv
+backend/scripts/embedder/emb_out/*.npy
+backend/scripts/embedder/emb_out/*.meta.tsv
+backend/scripts/embedder/embeddings/emb_out/*.npy
+backend/scripts/embedder/embeddings/emb_out/*.meta.tsv
+emb_out/*.npy
+emb_out/*.meta.tsv
 
 # IDE
 .vscode/

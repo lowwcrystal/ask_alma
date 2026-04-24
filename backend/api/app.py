@@ -3,7 +3,6 @@ FastAPI application for AskAlma RAG System.
 Connects React frontend to the conversation-enabled RAG backend.
 """
 
-import os
 import sys
 import traceback
 from pathlib import Path
@@ -15,22 +14,30 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-# Load .env from src/embedder/.env before importing rag_query
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env_path = os.path.join(project_root, "src", "embedder", ".env")
-if os.path.exists(env_path):
-    load_dotenv(env_path, override=True)
+# Resolve repo root (backend/api/app.py -> repo root) and load .env before
+# importing anything that reads env vars at import time.
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+for _candidate in (
+    REPO_ROOT / ".env",
+    REPO_ROOT / "backend" / "scripts" / "embedder" / ".env",
+):
+    if _candidate.exists():
+        load_dotenv(_candidate, override=True)
+        break
 else:
     load_dotenv(override=True)
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from src.embedder.rag_query import (  # noqa: E402
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from backend.services.rag_query import (  # noqa: E402
     get_conversation_history,
     get_pg_conn,
     rag_answer,
 )
+from backend.core import cache as _cache  # noqa: E402
 
-BUILD_DIR = Path(__file__).resolve().parent.parent / "frontend" / "build"
+BUILD_DIR = REPO_ROOT / "frontend" / "build"
 
 app = FastAPI(title="AskAlma API")
 
@@ -165,8 +172,8 @@ def health_check():
 
 
 @app.post("/api/chat")
-def chat(body: ChatBody):
-    """Main chat endpoint (RAG)."""
+async def chat(body: ChatBody):
+    """Main chat endpoint (RAG). Async so Redis + LLM calls don't block."""
     try:
         question = body.question
         if not question:
@@ -174,7 +181,7 @@ def chat(body: ChatBody):
                 status_code=400, content={"error": "Question is required"}
             )
 
-        result = rag_answer(
+        result = await rag_answer(
             question=question,
             conversation_id=body.conversation_id,
             user_id=body.user_id,
@@ -188,11 +195,12 @@ def chat(body: ChatBody):
                 {
                     "id": match["id"],
                     "similarity": float(match["similarity"]),
-                    "content": match["content"][:200] + "...",
+                    "content": (match["content"][:200] + "...") if match.get("content") else "",
                 }
-                for match in result["matches"][:5]
+                for match in result.get("matches", [])[:5]
             ],
-            "model": result["used_model_llm"],
+            "model": result.get("used_model_llm"),
+            "served_from_cache": result.get("served_from_cache"),
         }
     except Exception as e:
         error_trace = traceback.format_exc()
@@ -202,6 +210,19 @@ def chat(body: ChatBody):
             status_code=500,
             content={"error": str(e), "traceback": error_trace},
         )
+
+
+@app.get("/api/cache/stats")
+async def cache_stats():
+    """Observability for the RAG cache layers."""
+    snapshot = _cache.stats()
+    snapshot["redis_reachable"] = await _cache.ping()
+    return snapshot
+
+
+@app.on_event("shutdown")
+async def _shutdown_cache() -> None:
+    await _cache.close_cache()
 
 
 @app.get("/api/profile/{user_id}")

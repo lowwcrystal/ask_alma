@@ -78,15 +78,21 @@ ask_alma/
 │   │   ├── lib/             # Utilities (Supabase client)
 │   │   └── constants/       # Configuration constants
 │   └── package.json
-├── api/                      # FastAPI backend API
-│   └── app.py               # Main ASGI application
-├── src/
-│   ├── embedder/            # RAG system
-│   │   ├── rag_query.py     # Query processing
-│   │   ├── embedder.py      # Embedding generation
-│   │   └── upload_embeddings.py
-│   ├── migrations/          # Database migrations
-│   └── data_extraction/     # PDF processing
+├── backend/                  # Python backend
+│   ├── api/                 # FastAPI HTTP layer
+│   │   └── app.py           # Main ASGI application
+│   ├── core/                # Cross-cutting concerns
+│   │   ├── config.py        # Settings (env-driven)
+│   │   └── cache.py         # Redis cache client
+│   ├── services/            # Runtime services (imported by api/)
+│   │   └── rag_query.py     # RAG query pipeline
+│   └── scripts/             # Offline jobs (not imported by api/)
+│       ├── chunking/        # data_chunking library
+│       ├── data_extraction/ # PDF processing
+│       ├── embedder/        # Embedding generation + CLIs
+│       ├── migrations/      # SQL migrations
+│       ├── pipelines/       # End-to-end processing jobs
+│       └── scrapers/        # Web scrapers
 ├── requirements.txt          # Python dependencies
 └── vercel.json              # Deployment configuration
 ```
@@ -121,7 +127,7 @@ REACT_APP_API_URL=http://localhost:5001
 pip install -r requirements.txt
 ```
 
-Create a `.env` file in `src/embedder/`:
+Create a `.env` file at the project root:
 
 ```env
 # OpenAI API Key (required for embeddings and LLM)
@@ -137,13 +143,13 @@ Run the database migrations in order:
 
 ```sql
 -- Create user profiles table
-\i src/migrations/create_user_profiles.sql
+\i backend/scripts/migrations/create_user_profiles.sql
 
 -- Add profile image support
-\i src/migrations/add_profile_image.sql
+\i backend/scripts/migrations/add_profile_image.sql
 
 -- Add school column
-\i src/migrations/add_profile_school.sql
+\i backend/scripts/migrations/add_profile_school.sql
 ```
 
 ### 4. Data Preparation
@@ -157,7 +163,7 @@ Generate embeddings and upload to database:
 
 ```bash
 # Generate embeddings
-cd src/embedder
+cd backend/scripts/embedder
 python embedder.py
 
 # Upload to Supabase
@@ -179,7 +185,7 @@ The app will be available at `http://localhost:3000`
 
 ```bash
 # From project root
-python api/app.py
+python -m backend.api.app
 ```
 
 The API will be available at `http://localhost:5001`
@@ -203,13 +209,13 @@ The foundation of AskAlma began with gathering and processing academic data:
    - Scraped relevant websites, like course bulletins, for Columbia College, Columbia Engineering, and Barnard College
    - Converted information to structured JSONL format
    - Extracted course information, requirements, and academic policies
-   - Scripts: `scrape_columbia_college.py`, `scrape_barnard.py`, `scrape_bulletin.py`
+   - Scripts: `backend/scripts/scrapers/scrape_columbia_college.py`, `scrape_barnard.py`, `scrape_bulletin.py`
 
 3. **Data Chunking**
    - Split large documents into manageable chunks for embedding
    - Optimized chunk size for semantic search effectiveness
    - Preserved context and metadata (source, page numbers, etc.)
-   - Scripts: `chunk_scraped_data.py`, `chunk_separate_sources.py`
+   - Scripts: `backend/scripts/pipelines/process_all_data.py`, `backend/scripts/chunking/data_chunking.py`
 
 ### Phase 2: RAG System Development
 
@@ -219,20 +225,20 @@ The core retrieval and generation system was built next:
    - Implemented embedding pipeline using OpenAI's `text-embedding-3-small`
    - Created batch processing for efficient embedding generation
    - Stored embeddings with metadata for retrieval
-   - Files: `src/embedder/embedder.py`
+   - Files: `backend/scripts/embedder/embedder.py`
 
 2. **Vector Database Setup**
    - Set up Supabase PostgreSQL with pgvector extension
    - Created `documents` table with vector indexes for fast similarity search
    - Implemented batch upload system for embeddings
-   - Files: `src/embedder/upload_embeddings.py`
+   - Files: `backend/scripts/embedder/upload_embeddings.py`
 
 3. **Query System**
    - Built semantic search using cosine similarity
    - Implemented context retrieval with top-K matching
    - Integrated LLM (OpenAI GPT) for answer generation
    - Added conversation history support for contextual responses
-   - Files: `src/embedder/rag_query.py`
+   - Files: `backend/services/rag_query.py`
 
 ### Phase 3: Backend API Development
 
@@ -242,14 +248,14 @@ The HTTP API was developed to connect the frontend to the RAG system:
    - `/api/chat` - Main chat interface with RAG integration
    - `/api/conversations` - Conversation management (list, get, search, delete, rename)
    - `/api/profile` - User profile CRUD operations
-   - Files: `api/app.py`
+   - Files: `backend/api/app.py`
 
 2. **User Profile System**
    - Designed database schema for user profiles
    - Implemented profile-based personalization
    - Added school-specific filtering
    - Created migration scripts for schema evolution
-   - Files: `src/migrations/`
+   - Files: `backend/scripts/migrations/`
 
 3. **Conversation Management**
    - Built conversation storage and retrieval
@@ -454,7 +460,7 @@ The user profile includes:
 
 ### RAG Configuration
 
-In `src/embedder/rag_query.py`:
+In `backend/services/rag_query.py`:
 - `TOP_K = 5` - Number of relevant chunks to retrieve
 - `MAX_CONTEXT_CHARS = 8000` - Maximum context length
 - `GEN_MODEL = "openai:gpt-4o-mini"` - LLM model for generation

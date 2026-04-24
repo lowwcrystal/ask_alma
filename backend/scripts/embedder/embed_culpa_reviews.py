@@ -8,8 +8,7 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Add src/embedder to path
-sys.path.insert(0, str(Path(__file__).parent / "src" / "embedder"))
+sys.path.insert(0, str(Path(__file__).parent))
 
 from embedder import load_chunks_from_jsonl, embed_corpus, save_numpy_bundle, ENABLED_MODELS
 
@@ -67,7 +66,7 @@ print("1. Review the generated files in emb_out/:")
 print("   - openai_text-embedding-3-small.npy (embeddings)")
 print("   - openai_text-embedding-3-small.meta.tsv (metadata)")
 print("\n2. Upload to Supabase by running:")
-print("   python3 src/embedder/upload_embeddings.py")
+print("   python3 backend/scripts/embedder/upload_embeddings.py")
 print("\nNote: upload_embeddings.py will DELETE all existing documents")
 print("      and replace them with the new embeddings.")
 print("=" * 60)

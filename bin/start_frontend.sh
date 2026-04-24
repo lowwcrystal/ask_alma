@@ -5,8 +5,8 @@ echo "=================================="
 echo "🎨 Starting AskAlma Frontend..."
 echo "=================================="
 
-# Navigate to frontend directory
-cd "$(dirname "$0")/frontend"
+# Navigate to frontend directory (this script lives in bin/)
+cd "$(dirname "$0")/../frontend"
 
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then
