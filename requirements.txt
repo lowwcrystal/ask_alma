@@ -1,5 +1,7 @@
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.1
+fastapi==0.115.0
+uvicorn==0.32.0
 flask==3.0.0
 flask-cors==4.0.0
 aiosignal==1.4.0
