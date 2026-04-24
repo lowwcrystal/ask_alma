@@ -60,7 +60,8 @@ print("Step 2: Chunking all data with overlap and deduplication")
 print("="*80)
 
 # Import chunking functions
-sys.path.insert(0, 'src/chunking')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent / "chunking"))
 from data_chunking import process_jsonl_files
 
 # All files to process (2024-2025 and 2026)

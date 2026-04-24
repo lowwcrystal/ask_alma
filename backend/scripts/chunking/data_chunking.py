@@ -138,26 +138,30 @@ def process_jsonl_files(filenames, min_chars=2000, max_chars=3000, overlap_chars
     return data
 
 
-# All files to process (2024-2025 and 2026)
-filenames = [
-    "barnard_2024_2025.jsonl",
-    "columbia_engineering_2024_2025.jsonl",
-    "columbia_college_2024_2025.jsonl",
-    "seas_2026.jsonl",
-    "barnard_2026.jsonl",
-    "columbia_college_2026.jsonl"
-]
+if __name__ == "__main__":
+    # Default bulletin files (expected in CWD). Override by importing
+    # `process_jsonl_files` directly from another script.
+    filenames = [
+        "barnard_2024_2025.jsonl",
+        "columbia_engineering_2024_2025.jsonl",
+        "columbia_college_2024_2025.jsonl",
+        "seas_2026.jsonl",
+        "barnard_2026.jsonl",
+        "columbia_college_2026.jsonl",
+    ]
 
-# Process files into chunks with at least 2000 characters, max 3000, with 200 character overlap
-print("Starting chunking process...")
-print(f"Chunk size: minimum {2000} chars, maximum {3000} chars, overlap {200} chars")
-chunked_data = process_jsonl_files(filenames, min_chars=2000, max_chars=3000, overlap_chars=200)
+    print("Starting chunking process...")
+    print(f"Chunk size: minimum 2000 chars, maximum 3000 chars, overlap 200 chars")
+    chunked_data = process_jsonl_files(
+        filenames, min_chars=2000, max_chars=3000, overlap_chars=200
+    )
 
-# Save the chunks to a new JSONL file for embeddings
-output_file = "chunked_all_bulletins.jsonl"
-with open(output_file, "w", encoding="utf-8") as f:
-    for record in chunked_data:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    output_file = "chunked_all_bulletins.jsonl"
+    with open(output_file, "w", encoding="utf-8") as f:
+        for record in chunked_data:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-print(f"\n✓ Saved {len(chunked_data)} chunks to {output_file}")
-print(f"  Average chunk size: {sum(len(c['text']) for c in chunked_data) / len(chunked_data):.0f} characters")
+    print(f"\n✓ Saved {len(chunked_data)} chunks to {output_file}")
+    if chunked_data:
+        avg = sum(len(c["text"]) for c in chunked_data) / len(chunked_data)
+        print(f"  Average chunk size: {avg:.0f} characters")
