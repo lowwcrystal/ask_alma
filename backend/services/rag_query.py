@@ -274,28 +274,28 @@ def build_prompt(
     
     **Example:**
     - Previous: "Tell me about COMS 3134"
-    - Current: "What are the prerequisites?" → USE history (prerequisites for COMS 3134)
-    - Current: "What is PSYC 1001 about?" → IGNORE history (new unrelated question)
+    - Current: "What are the prerequisites?" -> USE history (prerequisites for COMS 3134)
+    - Current: "What is PSYC 1001 about?" -> IGNORE history (new unrelated question)
     
     ## TYPES OF QUESTIONS YOU CAN ANSWER:
     
     ### 1. Course Information Queries
     Answer directly and concisely:
-    - "What is [COURSE CODE/COURSE NAME] about?" → Provide course description
-    - "How many credits is [COURSE]?" → State the credits
-    - "What are prerequisites for [COURSE]?" → List prerequisites
-    - "When is [COURSE] offered?" → State Fall/Spring/Both
-    - "Who teaches [COURSE]?" → Name instructors if available
-    - "Is [COURSE] hard?" → Mention workload if in context
+    - "What is [COURSE CODE/COURSE NAME] about?" -> Provide course description
+    - "How many credits is [COURSE]?" -> State the credits
+    - "What are prerequisites for [COURSE]?" -> List prerequisites
+    - "When is [COURSE] offered?" -> State Fall/Spring/Both
+    - "Who teaches [COURSE]?" -> Name instructors if available
+    - "Is [COURSE] hard?" -> Mention workload if in context
     
     ### 2. Academic Program Queries
-    - "What are the requirements for [MAJOR]?" → List major requirements
-    - "What tracks exist in [MAJOR]?" → Explain available tracks
-    - "What's the difference between [PROGRAM A] and [PROGRAM B]?" → Compare
+    - "What are the requirements for [MAJOR]?" -> List major requirements
+    - "What tracks exist in [MAJOR]?" -> Explain available tracks
+    - "What's the difference between [PROGRAM A] and [PROGRAM B]?" -> Compare
     
     ### 3. Professor/Research Queries
-    - "What does Professor [NAME] research?" → Describe research areas
-    - "Who teaches in the [DEPARTMENT]?" → List faculty
+    - "What does Professor [NAME] research?" -> Describe research areas
+    - "Who teaches in the [DEPARTMENT]?" -> List faculty
     
     ### 4. Professor Review Queries (from CULPA student reviews)
     **When answering questions about professor reviews, teaching style, or student opinions:**
@@ -426,11 +426,11 @@ def build_prompt(
     ✓ If making recommendations: Do I need to ask for more information first?
     
     **Response approach based on question type:**
-    - Factual question about courses/requirements → Answer directly from context
-    - Professor review question → Provide balanced summary with rating, positive/negative points, handle partial names
-    - Personalized planning → Check for completed courses, ask for missing info if needed
-    - Follow-up question → Reference chat history if relevant
-    - Unrelated new question → Ignore chat history, focus on current question
+    - Factual question about courses/requirements -> Answer directly from context
+    - Professor review question -> Provide balanced summary with rating, positive/negative points, handle partial names
+    - Personalized planning -> Check for completed courses, ask for missing info if needed
+    - Follow-up question -> Reference chat history if relevant
+    - Unrelated new question -> Ignore chat history, focus on current question
     """)
 
 # -------------------------------
@@ -546,268 +546,362 @@ def retrieve_for_professor(
     return cur.fetchall()
 
 
-# -------------------------------
-# Main query function
-# -------------------------------
-def rag_answer(
-    question: str, 
-    conversation_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    table_name: str = "documents", 
-    probes: int = 10,
-    save_to_db: bool = True
-) -> dict:
-    """
-    1) Load conversation history (if conversation_id provided)
-    2) Embed the question with OpenAI embeddings
-    3) Retrieve TOP_K most similar chunks from pgvector (cosine distance)
-    4) Generate an answer with llama3.1 using retrieved context + chat history
-    5) Save the question and answer to the database (if save_to_db=True)
-    
-    Args:
-        question: User's question
-        conversation_id: UUID of existing conversation, or None to create new one
-        table_name: Name of the documents table
-        probes: IVFFlat probes parameter for search accuracy
-        save_to_db: Whether to save messages to database
-    
-    Returns:
-        Dictionary with answer, matches, conversation_id, and other metadata
-    """
-    # Connect to database
-    conn = get_pg_conn()
-    
-    # Fetch user profile (with error handling)
-    profile = None
-    try:
-        profile = get_user_profile(conn, user_id) if user_id else None
-    except Exception as e:
-        print(f"Warning: Could not fetch user profile: {e}")
-        profile = None
-    
-    profile_summary = format_profile_summary(profile) if profile else None
-    
-    # 1) Handle conversation
-    chat_history = []
-    if conversation_id:
-        # Load existing conversation history
-        chat_history = get_conversation_history(conn, conversation_id)
-    elif save_to_db:
-        # Create a new conversation
-        conversation_id = create_conversation(conn, user_id=user_id)
-    
-    # 2) Get query embedding
-    embedder = OpenAIEmbeddings(model=EMBED_MODEL)
-    q_vec = embedder.embed_query(question)  # -> list[float]
 
-    # 3) Retrieve from Postgres
+# ================================================================
+# Main query function (async, cache-aware)
+# ================================================================
+#
+# Public: rag_answer(...)
+#
+# Cache layers, applied in order:
+#   L1 Exact response   -> shortcut before any work
+#   L2 Query embedding  -> skip OpenAI embeddings call
+#   L3 Retrieved chunks -> skip pgvector lookup
+#   L4 LLM response     -> skip OpenAI chat completion
+#
+# All Redis failures fall through to the live path; see backend/core/cache.py.
+
+import asyncio
+
+
+def _vector_search_sync(
+    conn,
+    question: str,
+    q_vec: List[float],
+    profile: Optional[Dict[str, Any]],
+    table_name: str,
+    probes: int,
+) -> List[Dict[str, Any]]:
+    """
+    Synchronous vector-search block extracted from `rag_answer` so it can be
+    invoked from async code via `asyncio.to_thread`. Uses an already-opened
+    psycopg2 connection; caller manages conn lifecycle.
+    """
     cur = conn.cursor()
-
-    # Improve ANN recall (IVFFlat): set probes (tune 5-20)
     try:
         cur.execute("set ivfflat.probes = %s;", (probes,))
     except Exception:
-        pass  # if extension/version doesn't support it, ignore
+        pass
 
-    # Query top-k (cosine distance). Similarity = 1 - distance.
     vec_literal = "[" + ",".join(f"{x:.8f}" for x in q_vec) + "]"
 
-    rows = []
-    # Get school filter safely
     school_value = None
     if profile and isinstance(profile, dict):
         school_value = profile.get("school")
     school_filter = get_school_source_filter(school_value)
-    
-    # Check if this is a professor comparison query
+
+    rows: List[Dict[str, Any]] = []
+
+    # Branch 1 -- professor comparison
     comparison = detect_professor_comparison(question)
-    
     if comparison:
-        # Multi-query retrieval for fair comparison
+        embedder = OpenAIEmbeddings(model=EMBED_MODEL)
         prof1, prof2 = comparison
-        print(f"[DEBUG] Detected comparison: {prof1} vs {prof2}")
-        
-        # Retrieve TOP_K/2 results for each professor
         per_prof_limit = TOP_K // 2
-        
         prof1_rows = retrieve_for_professor(prof1, embedder, cur, table_name, school_filter, per_prof_limit)
         prof2_rows = retrieve_for_professor(prof2, embedder, cur, table_name, school_filter, per_prof_limit)
-        
-        # Combine results, avoiding duplicates
         seen_ids = set()
         for row in prof1_rows + prof2_rows:
             if row["id"] not in seen_ids:
                 rows.append(row)
                 seen_ids.add(row["id"])
-        
-        # Sort by similarity
         rows = sorted(rows, key=lambda x: x["similarity"], reverse=True)[:TOP_K]
-        
-        print(f"[DEBUG] Retrieved {len(prof1_rows)} chunks for {prof1}, {len(prof2_rows)} chunks for {prof2}")
-    else:
-        # Normal single-query retrieval
-        # Step 1: Get school-specific results + CULPA sources (if school filter exists)
-        # IMPORTANT: Always include CULPA (professor reviews) regardless of school
-        if school_filter:
-            included_patterns, excluded_patterns = school_filter
-            
-            # Build SQL with OR conditions for included patterns
-            if included_patterns:
-                # Create OR conditions for included school sources
-                included_conditions = " OR ".join(["source ILIKE %s"] * len(included_patterns))
-                school_sql = f"""
-                    select
-                      id,
-                      content,
-                      1 - (embedding <=> %s::vector) as similarity,
-                      source
+        cur.close()
+        return rows
+
+    # Branch 2 -- scoped by school filter
+    if school_filter:
+        included_patterns, excluded_patterns = school_filter
+        if included_patterns:
+            included_conditions = " OR ".join(["source ILIKE %s"] * len(included_patterns))
+            school_sql = f"""
+                select id, content, 1 - (embedding <=> %s::vector) as similarity, source
+                from {table_name}
+                where (({included_conditions}) OR source ILIKE 'culpa.info%%')
+                order by embedding <=> %s::vector
+                limit %s;
+            """
+            params = [vec_literal] + included_patterns + [vec_literal, TOP_K]
+            cur.execute(school_sql, params)
+        else:
+            school_sql = f"""
+                select id, content, 1 - (embedding <=> %s::vector) as similarity, source
+                from {table_name}
+                where source ILIKE 'culpa.info%%'
+                order by embedding <=> %s::vector
+                limit %s;
+            """
+            cur.execute(school_sql, (vec_literal, vec_literal, TOP_K))
+        rows.extend(cur.fetchall())
+        existing_ids = {row["id"] for row in rows}
+        if len(rows) < TOP_K:
+            remaining = TOP_K - len(rows)
+            if excluded_patterns:
+                excluded_conditions = " AND ".join(["source NOT ILIKE %s"] * len(excluded_patterns))
+                general_sql = f"""
+                    select id, content, 1 - (embedding <=> %s::vector) as similarity, source
                     from {table_name}
-                    where (({included_conditions}) OR source ILIKE 'culpa.info%%')
+                    where ({excluded_conditions} OR source ILIKE 'culpa.info%%')
                     order by embedding <=> %s::vector
                     limit %s;
                 """
-                params = [vec_literal] + included_patterns + [vec_literal, TOP_K]
-                cur.execute(school_sql, params)
+                params = excluded_patterns + [vec_literal, vec_literal, remaining]
+                cur.execute(general_sql, params)
             else:
-                # Fallback to old behavior if no included patterns
-                school_sql = f"""
-                    select
-                      id,
-                      content,
-                      1 - (embedding <=> %s::vector) as similarity,
-                      source
+                general_sql = f"""
+                    select id, content, 1 - (embedding <=> %s::vector) as similarity, source
                     from {table_name}
                     where source ILIKE 'culpa.info%%'
                     order by embedding <=> %s::vector
                     limit %s;
                 """
-                cur.execute(school_sql, (vec_literal, vec_literal, TOP_K))
-            
-            school_rows = cur.fetchall()
-            rows.extend(school_rows)
-            existing_ids = {row["id"] for row in rows}
-            
-            # Step 2: If we don't have enough school-specific results, fill with general results
-            # This catches other schools' data + any CULPA sources not already retrieved
-            # Exclude the excluded patterns (e.g., Barnard for Columbia students, or Columbia for Barnard students)
-            if len(rows) < TOP_K:
-                remaining = TOP_K - len(rows)
-                if excluded_patterns:
-                    # Build NOT conditions for excluded patterns
-                    excluded_conditions = " AND ".join(["source NOT ILIKE %s"] * len(excluded_patterns))
-                    general_sql = f"""
-                        select
-                          id,
-                          content,
-                          1 - (embedding <=> %s::vector) as similarity,
-                          source
-                        from {table_name}
-                        where ({excluded_conditions} OR source ILIKE 'culpa.info%%')
-                        order by embedding <=> %s::vector
-                        limit %s;
-                    """
-                    params = excluded_patterns + [vec_literal, vec_literal, remaining]
-                    cur.execute(general_sql, params)
-                else:
-                    # No exclusions, get all sources
-                    general_sql = f"""
-                        select
-                          id,
-                          content,
-                          1 - (embedding <=> %s::vector) as similarity,
-                          source
-                        from {table_name}
-                        where source ILIKE 'culpa.info%%'
-                        order by embedding <=> %s::vector
-                        limit %s;
-                    """
-                    cur.execute(general_sql, (vec_literal, vec_literal, remaining))
-                
-                general_rows = cur.fetchall()
-                # Add general results, avoiding duplicates
-                for row in general_rows:
-                    if row["id"] not in existing_ids:
-                        rows.append(row)
-                        existing_ids.add(row["id"])
-                        if len(rows) >= TOP_K:
-                            break
-            
-            # Sort by similarity to ensure best results are first
-            rows = sorted(rows, key=lambda x: x["similarity"], reverse=True)[:TOP_K]
-        else:
-            # No school filter - get general results
-            base_sql = f"""
-                select
-                  id,
-                  content,
-                  1 - (embedding <=> %s::vector) as similarity,
-                  source
-                from {table_name}
-                order by embedding <=> %s::vector
-                limit %s;
-            """
-            cur.execute(base_sql, (vec_literal, vec_literal, TOP_K))
-            rows = cur.fetchall()
+                cur.execute(general_sql, (vec_literal, vec_literal, remaining))
+            for row in cur.fetchall():
+                if row["id"] not in existing_ids:
+                    rows.append(row)
+                    existing_ids.add(row["id"])
+                    if len(rows) >= TOP_K:
+                        break
+        rows = sorted(rows, key=lambda x: x["similarity"], reverse=True)[:TOP_K]
+        cur.close()
+        return rows
 
+    # Branch 3 -- unfiltered
+    base_sql = f"""
+        select id, content, 1 - (embedding <=> %s::vector) as similarity, source
+        from {table_name}
+        order by embedding <=> %s::vector
+        limit %s;
+    """
+    cur.execute(base_sql, (vec_literal, vec_literal, TOP_K))
+    rows = cur.fetchall()
     cur.close()
+    return rows
 
-    contexts = [row["content"] for row in rows]
-    
-    # 4) Build prompt with chat history
-    prompt = build_prompt(question, contexts, chat_history, profile_summary)
 
-    
+async def rag_answer(
+    question: str,
+    conversation_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    table_name: str = "documents",
+    probes: int = 10,
+    save_to_db: bool = True,
+) -> dict:
+    """
+    Async, cache-aware RAG pipeline.
 
-    # 5) Generate answer with chosen LLM
-    if LLM_PROVIDER == "openai":
-        llm = ChatOpenAI(
-            model=OPENAI_MODELS[OPENAI_MODEL],
-            temperature=LLM_TEMPERATURE
+    * Never blocks the event loop -- sync I/O (psycopg2, langchain .invoke)
+      runs in a thread pool.
+    * Redis failures fall through silently to the live path.
+    """
+    from backend.core import cache as _cache  # local import avoids cycles
+
+    # --- Step 0: connect and hydrate context (profile + history) ------------
+    conn = await asyncio.to_thread(get_pg_conn)
+    try:
+        profile: Optional[Dict[str, Any]] = None
+        try:
+            if user_id:
+                profile = await asyncio.to_thread(get_user_profile, conn, user_id)
+        except Exception as e:
+            print(f"Warning: Could not fetch user profile: {e}")
+            profile = None
+
+        profile_summary = format_profile_summary(profile) if profile else None
+        school_value = profile.get("school") if isinstance(profile, dict) else None
+
+        # Conversation: load existing or (optionally) create one.
+        is_new_conversation = conversation_id is None
+        chat_history: List[Dict[str, Any]] = []
+        if conversation_id:
+            chat_history = await asyncio.to_thread(
+                get_conversation_history, conn, conversation_id, MAX_HISTORY_MESSAGES
+            )
+        elif save_to_db:
+            conversation_id = await asyncio.to_thread(create_conversation, conn, user_id)
+
+        history_len = len(chat_history)
+
+        # --- Step 1: prefetch L1 + L2 + L3 in a single pipeline -------------
+        #
+        # L1 is skipped on brand-new conversations: a cache hit there would
+        # return a payload with a stale conversation_id from a prior session.
+        # L2 and L3 are always safe because they're scoped to query-level data.
+        prefetched = await _cache.prefetch_layers(
+            query=question,
+            user_id=user_id,
+            conversation_id=None if is_new_conversation else conversation_id,
+            profile=profile,
+            history_len=history_len,
+            school=school_value,
         )
-        gen_model_name = f"openai:{OPENAI_MODEL}"
-    else:  # ollama
-        llm = ChatOllama(
-            model=OLLAMA_MODELS[OLLAMA_MODEL],
-            base_url="http://localhost:11434",
-            temperature=LLM_TEMPERATURE
-        )
-        gen_model_name = f"ollama:{OLLAMA_MODEL}"
-    
-    answer = llm.invoke(prompt).content
 
-    # 6) Save to database
-    if save_to_db and conversation_id:
-        # Save user message
-        save_message(conn, conversation_id, "user", question)
-        
-        # Save assistant response with metadata about retrieved chunks
-        metadata = {
-            "top_matches": [
+        # --- Step 2: L1 shortcut --------------------------------------------
+        if not is_new_conversation and prefetched.get("exact"):
+            cached = prefetched["exact"]
+            # Overwrite IDs the cache shouldn't own.
+            cached["conversation_id"] = conversation_id
+            if save_to_db and conversation_id:
+                await asyncio.to_thread(save_message, conn, conversation_id, "user", question)
+                await asyncio.to_thread(
+                    save_message, conn, conversation_id, "assistant",
+                    cached.get("answer", ""), {"served_from_cache": "exact"},
+                )
+            cached["served_from_cache"] = "exact"
+            cached["chat_history"] = chat_history
+            return cached
+
+        # --- Step 3: embedding (L2) -----------------------------------------
+        q_vec: Optional[List[float]] = prefetched.get("embedding")
+        if q_vec is None:
+            embedder = OpenAIEmbeddings(model=EMBED_MODEL)
+            q_vec = await embedder.aembed_query(question)
+            await _cache.set_embedding(question, q_vec)
+
+        # --- Step 3a: semantic response cache (L1.5) ------------------------
+        if history_len == 0 and q_vec:
+            semantic_hit = await _cache.get_semantic_response(
+                query=question,
+                embedding=q_vec,
+                school=school_value,
+                profile=profile,
+            )
+            if semantic_hit is not None:
+                semantic_hit["conversation_id"] = conversation_id
+                semantic_hit["chat_history"] = chat_history
+                semantic_hit["served_from_cache"] = "semantic"
+                if save_to_db and conversation_id:
+                    await asyncio.to_thread(
+                        save_message, conn, conversation_id, "user", question,
+                    )
+                    await asyncio.to_thread(
+                        save_message, conn, conversation_id, "assistant",
+                        semantic_hit.get("answer", ""),
+                        {"served_from_cache": "semantic"},
+                    )
+                return semantic_hit
+
+        # --- Step 4: chunks (L3) --------------------------------------------
+        rows: List[Dict[str, Any]] = prefetched.get("chunks") or []
+        if not rows:
+            rows = await asyncio.to_thread(
+                _vector_search_sync, conn, question, q_vec, profile, table_name, probes,
+            )
+            # Only cache if we actually retrieved something -- empty lists usually
+            # mean a DB/query failure we don't want to memoize.
+            if rows:
+                # psycopg2 RealDictRow isn't directly JSON-serializable; coerce.
+                serializable = [
+                    {
+                        "id": r["id"],
+                        "content": r["content"],
+                        "similarity": float(r["similarity"]),
+                        "source": r.get("source"),
+                    }
+                    for r in rows
+                ]
+                await _cache.set_chunks(question, school_value, serializable)
+
+        contexts = [row["content"] for row in rows]
+
+        # --- Step 5: LLM answer (L4) ----------------------------------------
+        cached_answer = await _cache.get_llm_response(
+            question, user_id,
+            None if is_new_conversation else conversation_id,
+            profile, history_len, rows,
+        )
+        if cached_answer is not None:
+            answer = cached_answer
+            gen_model_name = "cache:llm"
+        else:
+            prompt = build_prompt(question, contexts, chat_history, profile_summary)
+            if LLM_PROVIDER == "openai":
+                llm = ChatOpenAI(
+                    model=OPENAI_MODELS[OPENAI_MODEL], temperature=LLM_TEMPERATURE,
+                )
+                gen_model_name = f"openai:{OPENAI_MODEL}"
+            else:
+                llm = ChatOllama(
+                    model=OLLAMA_MODELS[OLLAMA_MODEL],
+                    base_url="http://localhost:11434",
+                    temperature=LLM_TEMPERATURE,
+                )
+                gen_model_name = f"ollama:{OLLAMA_MODEL}"
+            response = await llm.ainvoke(prompt)
+            answer = response.content
+            await _cache.set_llm_response(
+                question, user_id,
+                None if is_new_conversation else conversation_id,
+                profile, history_len, rows, answer,
+            )
+
+        # --- Step 6: persist messages ---------------------------------------
+        if save_to_db and conversation_id:
+            await asyncio.to_thread(save_message, conn, conversation_id, "user", question)
+            metadata = {
+                "top_matches": [
+                    {
+                        "id": r["id"],
+                        "similarity": float(r["similarity"]),
+                        "content_preview": r["content"][:200],
+                    }
+                    for r in rows[:5]
+                ],
+            }
+            if profile_summary:
+                metadata["student_profile_summary"] = profile_summary
+            await asyncio.to_thread(
+                save_message, conn, conversation_id, "assistant", answer, metadata,
+            )
+
+        # --- Step 7: response + L1 write-back -------------------------------
+        response_payload = {
+            "conversation_id": conversation_id,
+            "question": question,
+            "answer": answer,
+            "matches": [
                 {
-                    "id": row["id"],
-                    "similarity": float(row["similarity"]),
-                    "content_preview": row["content"][:200]
+                    "id": r["id"],
+                    "content": r["content"],
+                    "similarity": float(r["similarity"]),
+                    "source": r.get("source"),
                 }
-                for row in rows[:5]  # Save top 5 matches
-            ]
+                for r in rows
+            ],
+            "chat_history": chat_history,
+            "used_model_embed": EMBED_MODEL,
+            "used_model_llm": gen_model_name,
         }
-        if profile_summary:
-            metadata["student_profile_summary"] = profile_summary
-        if school_filter and rows:
-            metadata["school_filter_applied"] = school_filter
-        save_message(conn, conversation_id, "assistant", answer, metadata)
-    
-    conn.close()
 
-    return {
-        "conversation_id": conversation_id,
-        "question": question,
-        "answer": answer,
-        "matches": rows,   # includes id, content, similarity
-        "chat_history": chat_history,
-        "used_model_embed": EMBED_MODEL,
-        "used_model_llm": gen_model_name,
-    }
+        # Only cache L1 for established conversations, to avoid leaking stale
+        # conversation_ids between sessions.
+        cacheable_payload: Optional[Dict[str, Any]] = None
+        if not is_new_conversation:
+            cacheable_payload = {k: v for k, v in response_payload.items()
+                                 if k not in ("chat_history", "conversation_id")}
+            await _cache.set_exact_response(
+                question, user_id, conversation_id, profile, history_len, cacheable_payload,
+            )
+
+        if history_len == 0 and q_vec:
+            if cacheable_payload is None:
+                cacheable_payload = {k: v for k, v in response_payload.items()
+                                     if k not in ("chat_history", "conversation_id")}
+            await _cache.set_semantic_response(
+                query=question,
+                embedding=q_vec,
+                answer=cacheable_payload,
+                school=school_value,
+                profile=profile,
+            )
+
+        return response_payload
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
 
 # -------------------------------
 # CLI usage
@@ -816,31 +910,29 @@ if __name__ == "__main__":
     print("\n" + "="*80)
     print("AskAlma - Academic Assistant with Conversation Context")
     print("="*80)
-    
-    # Example: Start a new conversation
-    print("\n--- Starting NEW conversation ---\n")
-    q1 = "What are the core classes for first year Columbia College students?"
-    result1 = rag_answer(q1, conversation_id=None, save_to_db=True)
-    
-    print(f"Q: {q1}")
-    print(f"\nA: {result1['answer']}")
-    print(f"\n[Conversation ID: {result1['conversation_id']}]")
-    
-    # Example: Continue the conversation with a follow-up question
-    print("\n" + "─"*80)
-    print("\n--- Follow-up question in SAME conversation ---\n")
-    conversation_id = result1['conversation_id']
-    q2 = "What are the prerequisites for those classes?"
-    result2 = rag_answer(q2, conversation_id=conversation_id, save_to_db=True)
-    
-    print(f"Q: {q2}")
-    print(f"\nA: {result2['answer']}")
-    
-    # Example: Another follow-up
-    print("\n" + "─"*80)
-    print("\n--- Another follow-up question ---\n")
-    q3 = "How many credits are they worth in total?"
-    result3 = rag_answer(q3, conversation_id=conversation_id, save_to_db=True)
+
+    async def _cli_demo() -> None:
+        # Example: Start a new conversation
+        q1 = "What are the core classes for first year Columbia College students?"
+        result1 = await rag_answer(q1, conversation_id=None, save_to_db=True)
+
+        # Example: Continue the conversation with a follow-up question
+        print("\n" + "-"*80)
+        print("\n--- Follow-up question in SAME conversation ---\n")
+        conversation_id = result1['conversation_id']
+        q2 = "What are the prerequisites for those classes?"
+        result2 = await rag_answer(q2, conversation_id=conversation_id, save_to_db=True)
+        print(f"Q: {q2}")
+        print(f"\nA: {result2['answer']}")
+
+        # Example: Another follow-up
+        print("\n" + "-"*80)
+        print("\n--- Another follow-up question ---\n")
+        q3 = "How many credits are they worth in total?"
+        result3 = await rag_answer(q3, conversation_id=conversation_id, save_to_db=True)
+        return result2, result3
+
+    result2, result3 = asyncio.run(_cli_demo())
     
     print(f"Q: {q3}")
     print(f"\nA: {result3['answer']}")
@@ -860,8 +952,8 @@ if __name__ == "__main__":
     print("="*80)
     
     for i, r in enumerate(result3["matches"], 1):
-        print(f"\n{'─'*80}")
+        print(f"\n{'-'*80}")
         print(f"[{i}] SIMILARITY: {r['similarity']:.4f} | ID: {r['id']}")
-        print(f"{'─'*80}")
+        print(f"{'-'*80}")
         print(r['content'])
-        print(f"{'─'*80}")
+        print(f"{'-'*80}")

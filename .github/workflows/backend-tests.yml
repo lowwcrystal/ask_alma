@@ -1,0 +1,86 @@
+name: backend tests
+
+# Runs the cache + failure-mode test suite on every push and PR.
+# Uses a throwaway Redis 7 service container so we don't burn quota on
+# Redis Cloud and so the suite is deterministic.
+#
+# Phase 2 (RAG pipeline with mocked OpenAI) runs by default because it
+# doesn't call any external services. Phase 3+4 (bench_cache.py) are
+# manual-only; see scripts under backend/tests/bench_cache.py.
+
+on:
+  push:
+    branches: [main, "feature/**"]
+    paths:
+      - "backend/**"
+      - "requirements*.txt"
+      - ".github/workflows/backend-tests.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "requirements*.txt"
+      - ".github/workflows/backend-tests.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cache-tests:
+    name: cache + rag-pipeline tests
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis/redis-stack-server:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      REDIS_URL: redis://localhost:6379
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Wait for Redis
+        run: |
+          for i in $(seq 1 10); do
+            if redis-cli -h localhost -p 6379 ping | grep -q PONG; then
+              echo "Redis up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Redis did not come up in time"; exit 1
+
+      - name: Run failure-mode tests (no network)
+        run: pytest backend/tests/test_failure_modes.py -v
+
+      - name: Run correctness tests (requires Redis)
+        run: pytest backend/tests/test_cache.py -v
+
+      - name: Run RAG pipeline tests (mocks external I/O)
+        run: pytest backend/tests/test_rag_cache.py -v
+
+      - name: Run full suite once more to confirm no ordering flakes
+        run: pytest backend/tests -v

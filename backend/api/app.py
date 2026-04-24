@@ -35,6 +35,7 @@ from backend.services.rag_query import (  # noqa: E402
     get_pg_conn,
     rag_answer,
 )
+from backend.core import cache as _cache  # noqa: E402
 
 BUILD_DIR = REPO_ROOT / "frontend" / "build"
 
@@ -171,8 +172,8 @@ def health_check():
 
 
 @app.post("/api/chat")
-def chat(body: ChatBody):
-    """Main chat endpoint (RAG)."""
+async def chat(body: ChatBody):
+    """Main chat endpoint (RAG). Async so Redis + LLM calls don't block."""
     try:
         question = body.question
         if not question:
@@ -180,7 +181,7 @@ def chat(body: ChatBody):
                 status_code=400, content={"error": "Question is required"}
             )
 
-        result = rag_answer(
+        result = await rag_answer(
             question=question,
             conversation_id=body.conversation_id,
             user_id=body.user_id,
@@ -194,11 +195,12 @@ def chat(body: ChatBody):
                 {
                     "id": match["id"],
                     "similarity": float(match["similarity"]),
-                    "content": match["content"][:200] + "...",
+                    "content": (match["content"][:200] + "...") if match.get("content") else "",
                 }
-                for match in result["matches"][:5]
+                for match in result.get("matches", [])[:5]
             ],
-            "model": result["used_model_llm"],
+            "model": result.get("used_model_llm"),
+            "served_from_cache": result.get("served_from_cache"),
         }
     except Exception as e:
         error_trace = traceback.format_exc()
@@ -208,6 +210,19 @@ def chat(body: ChatBody):
             status_code=500,
             content={"error": str(e), "traceback": error_trace},
         )
+
+
+@app.get("/api/cache/stats")
+async def cache_stats():
+    """Observability for the RAG cache layers."""
+    snapshot = _cache.stats()
+    snapshot["redis_reachable"] = await _cache.ping()
+    return snapshot
+
+
+@app.on_event("shutdown")
+async def _shutdown_cache() -> None:
+    await _cache.close_cache()
 
 
 @app.get("/api/profile/{user_id}")
