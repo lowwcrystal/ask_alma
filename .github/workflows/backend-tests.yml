@@ -1,12 +1,5 @@
 name: backend tests
 
-# Runs the cache + failure-mode test suite on every push and PR.
-# Uses a throwaway Redis 7 service container so we don't burn quota on
-# Redis Cloud and so the suite is deterministic.
-#
-# Phase 2 (RAG pipeline with mocked OpenAI) runs by default because it
-# doesn't call any external services. Phase 3+4 (bench_cache.py) are
-# manual-only; see scripts under backend/tests/bench_cache.py.
 
 on:
   push:
@@ -63,21 +56,33 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Wait for Redis
+      - name: Verify Redis + RediSearch
         run: |
-          for i in $(seq 1 10); do
-            if redis-cli -h localhost -p 6379 ping | grep -q PONG; then
-              echo "Redis up"; exit 0
-            fi
-            sleep 1
-          done
-          echo "Redis did not come up in time"; exit 1
+          python - <<'PY'
+          import redis
+          r = redis.Redis(host="localhost", port=6379, socket_connect_timeout=5)
+          assert r.ping(), "Redis did not respond to PING"
+          modules = r.execute_command("MODULE", "LIST")
+          names = set()
+          for entry in modules or []:
+              if isinstance(entry, (list, tuple)):
+                  for item in entry:
+                      if isinstance(item, (bytes, bytearray)):
+                          names.add(item.decode("utf-8", errors="replace").lower())
+                      elif isinstance(item, str):
+                          names.add(item.lower())
+          assert "search" in names, f"RediSearch module not loaded; got {names!r}"
+          print("Redis up and RediSearch loaded")
+          PY
 
       - name: Run failure-mode tests (no network)
         run: pytest backend/tests/test_failure_modes.py -v
 
       - name: Run correctness tests (requires Redis)
         run: pytest backend/tests/test_cache.py -v
+
+      - name: Run semantic cache tests (requires RediSearch)
+        run: pytest backend/tests/test_semantic_cache.py -v
 
       - name: Run RAG pipeline tests (mocks external I/O)
         run: pytest backend/tests/test_rag_cache.py -v
